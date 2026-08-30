@@ -1,0 +1,3 @@
+name: SideChat 澄清模式
+description: 父权限过滤的只读澄清 Agent；支持读取、搜索、Shell、Web、计划、提问、子代理和 workflow。
+order: 20

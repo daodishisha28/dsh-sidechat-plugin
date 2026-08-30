@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "experimentalDecorators": false,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "files": [
+    "types/dsh-compat.d.ts",
+    "src/index.ts",
+    "src/preset-root.ts",
+    "src/service.ts",
+    "src/spec.ts",
+    "src/types.ts",
+    "src/seed.ts",
+    "src/fold.ts",
+    "src/transactions.ts"
+    ,"src/safe-boundary.ts",
+    "src/read.ts",
+    "src/tool.ts",
+    "src/revision.ts",
+    "src/tool-contract.ts",
+    "src/relations.ts"
+    ,"src/task-seed.ts"
+    ,"src/usage.ts"
+  ]
+}

@@ -1,0 +1,7 @@
+packages:
+  - .
+
+# DSH supplies all @deepseek-ai/* peers at plugin runtime. They are
+# intentionally not fetched into this standalone source checkout.
+autoInstallPeers: false
+confirmModulesPurge: false

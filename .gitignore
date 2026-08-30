@@ -1,0 +1,20 @@
+# Dependencies and local package store
+node_modules/
+.pnpm-store/
+
+# Generated build and package artifacts
+lib/
+*.tgz
+coverage/
+*.tsbuildinfo
+
+# Local DSH profiles and smoke-test state
+.smoke-*/
+.dsh/
+
+# Logs, editor and operating-system files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

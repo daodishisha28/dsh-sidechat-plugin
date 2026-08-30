@@ -1,0 +1,124 @@
+{
+  "name": "dsh-sidechat-plugin",
+  "version": "0.3.4",
+  "description": "Persistent SideChat sessions for DeepSeek Harness",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./preset-root": {
+      "types": "./lib/types/preset-root.d.ts",
+      "default": "./lib/preset-root.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.map",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "presets/**",
+    "docs/**",
+    "DeepSeek Harness SideChat 插件产品需求与技术设计.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "typecheck": "tsc -p tsconfig.host.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "lint": "eslint src tests --max-warnings=0",
+    "test": "vitest run",
+    "test:unit": "node scripts/run-test-kind.mjs unit",
+    "test:host": "node scripts/run-test-kind.mjs host",
+    "test:client": "node scripts/run-test-kind.mjs client",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.host.json && tsc -p tsconfig.client.json && tsdown",
+    "verify:contracts": "node scripts/verify-dsh-contracts.mjs",
+    "verify:portable": "node scripts/verify-portable.mjs",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm verify:contracts && pnpm verify:portable && pnpm build && pnpm smoke:manifest",
+    "smoke:manifest": "node scripts/smoke-manifest.mjs",
+    "prepack": "pnpm build && pnpm smoke:manifest"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-commands",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session"
+      ],
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "pnpm": ">=10.0.0 <12.0.0"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "sidechat",
+    "clarification",
+    "agent"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-agent": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-agent-presets": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-connection": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-locale": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-chat": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-commands": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-client-ui-session": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-session": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-session-query": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-storage-domain": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-system-prompt": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-token-meter": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.2-alpha.1",
+    "@deepseek-ai/dsh-user-approval": "0.1.2-alpha.1",
+    "@deepseek-ai/schemastery": "0.1.2-alpha.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/dom": "^10.4.1",
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "jsdom": "^29.1.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^4.1.8"
+  }
+}

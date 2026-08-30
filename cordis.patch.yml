@@ -1,0 +1,30 @@
+# DeepSeek Harness SideChat bundle. The preset root is a package-owned, read-only
+# contribution; the agent-presets row is restated because DSH patches replace a
+# row's complete config value.
+- insert:
+    - id: sidechat-preset-root
+      name: dsh-sidechat-plugin/preset-root
+
+- id: agent-presets
+  name: '@deepseek-ai/dsh-agent-presets'
+  inject: [sidechatPresetRoot]
+  config:
+    default: standard
+    includeShippedRoot: true
+    includeUserRoot: true
+    roots:
+      - path: !!js ctx.sidechatPresetRoot.path
+        trust: system
+
+- insert:
+    - id: sidechat
+      name: dsh-sidechat-plugin
+      config:
+        foldMaxTokens: 500
+        citeMaxTokens: 500
+        readMaxMessages: 5
+        readMaxChars: 20000
+        seedSummaryMaxTokens: 500
+        seedTaskMaxTokens: 500
+        allowCrossParentCite: false
+        preset: sidechat-clarifier
