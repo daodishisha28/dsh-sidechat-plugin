@@ -70,4 +70,41 @@ describe('atomic aggregate reducers', () => {
     expect(withdrawn.folds.map(fold => fold.revisionState)).toEqual(['current', 'withdrawn'])
     expect(withdrawn.folds[1]).toMatchObject({ withdrawalState: 'pending', withdrawalReason: 'obsolete' })
   })
+
+  it('keeps a late out-of-order commit as superseded audit instead of regressing current', () => {
+    const prepared = reserveFold(record(), {
+      foldId: '11111111-1111-4111-8111-111111111111', state: 'prepared', generatedContent: 'v1',
+      baselineSeq: 1, previewThroughSeq: 1, estimatedTokens: 1, structureValid: true, createdAt: 3, updatedAt: 3,
+    })
+    const second = reserveFold(prepared, {
+      foldId: '22222222-2222-4222-8222-222222222222', state: 'committed', generatedContent: 'v2',
+      committedContent: 'v2', baselineSeq: 2, previewThroughSeq: 2, estimatedTokens: 1,
+      structureValid: true, createdAt: 4, updatedAt: 4,
+    })
+    const secondCurrent = promoteFoldRevision(second, '22222222-2222-4222-8222-222222222222', 5)
+    expect(secondCurrent.folds.map(fold => fold.revisionState)).toEqual([undefined, 'current'])
+    const lateCommitted = updateFold(secondCurrent, '11111111-1111-4111-8111-111111111111', fold => ({
+      ...fold, state: 'committed' as const, committedContent: 'v1', committedAt: 6, updatedAt: 6,
+    }))
+    const fenced = promoteFoldRevision(lateCommitted, '11111111-1111-4111-8111-111111111111', 7)
+    expect(fenced.folds.map(fold => fold.revisionState)).toEqual(['superseded', 'current'])
+    expect(fenced.folds[0]).toMatchObject({ revision: 1, state: 'committed', committedContent: 'v1' })
+    expect(fenced.folds[1]).toMatchObject({ revision: 2, committedContent: 'v2' })
+  })
+
+  it('still demotes an older current when a newer revision is promoted in order', () => {
+    const first = reserveFold(record(), {
+      foldId: '11111111-1111-4111-8111-111111111111', state: 'committed', generatedContent: 'v1',
+      committedContent: 'v1', baselineSeq: 1, previewThroughSeq: 1, estimatedTokens: 1,
+      structureValid: true, createdAt: 3, updatedAt: 3,
+    })
+    const firstCurrent = promoteFoldRevision(first, '11111111-1111-4111-8111-111111111111', 4)
+    const second = reserveFold(firstCurrent, {
+      foldId: '22222222-2222-4222-8222-222222222222', state: 'committed', generatedContent: 'v2',
+      committedContent: 'v2', baselineSeq: 2, previewThroughSeq: 2, estimatedTokens: 1,
+      structureValid: true, createdAt: 5, updatedAt: 5,
+    })
+    const promoted = promoteFoldRevision(second, '22222222-2222-4222-8222-222222222222', 6)
+    expect(promoted.folds.map(fold => fold.revisionState)).toEqual(['superseded', 'current'])
+  })
 })

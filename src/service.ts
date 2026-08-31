@@ -77,6 +77,12 @@ import {
   withdrawFoldRevision,
 } from './transactions.ts'
 import { atSafeBoundary } from './safe-boundary.ts'
+import {
+  projectTrajectory,
+  selectTrajectorySnapshots,
+  trajectoryOverview,
+  TRAJECTORY_PROJECTION_VERSION,
+} from './trajectory.ts'
 
 const PLUGIN_ID = 'dsh-sidechat'
 
@@ -347,6 +353,8 @@ export class SideChatService extends TypertRemoteService {
         case 'get': value = await this.get(request); break
         case 'catalog': value = await this.catalog(request); break
         case 'seedChoices': value = await this.seedChoices(request); break
+        case 'trajectoryOverview': value = await this.trajectoryOverview(request); break
+        case 'trajectoryItems': value = await this.trajectoryItems(request); break
         case 'assistantMessages': value = await this.assistantMessages(request); break
         case 'prepareFold': value = await this.prepareFold(request); break
         case 'usage': value = await this.usage(request); break
@@ -507,6 +515,36 @@ export class SideChatService extends TypertRemoteService {
     }
   }
 
+  @Remote('trajectoryOverview')
+  async trajectoryOverview(request: unknown): Promise<SideChatOutcome<unknown>> {
+    const parsed = getSideChatRequestSchema.safeParse(request)
+    if (!parsed.success) return failure('bad-request', parsed.error.issues[0]?.message ?? 'invalid request')
+    try {
+      const surface = await this.ctx.sessionQuery.readSurface(SessionId(parsed.data.sessionId))
+      const capturedThroughSeq = surface.capturedThroughSeq ?? surface.events.at(-1)?.seq ?? 0
+      const items = projectTrajectory(parsed.data.sessionId, surface.events)
+      return success(trajectoryOverview(items, surface.events, capturedThroughSeq))
+    } catch (error) {
+      return failure('session-not-found', String(error))
+    }
+  }
+
+  @Remote('trajectoryItems')
+  async trajectoryItems(request: unknown): Promise<SideChatOutcome<unknown>> {
+    const parsed = getSideChatRequestSchema.safeParse(request)
+    if (!parsed.success) return failure('bad-request', parsed.error.issues[0]?.message ?? 'invalid request')
+    try {
+      const surface = await this.ctx.sessionQuery.readSurface(SessionId(parsed.data.sessionId))
+      return success({
+        items: projectTrajectory(parsed.data.sessionId, surface.events),
+        capturedThroughSeq: surface.capturedThroughSeq ?? surface.events.at(-1)?.seq ?? 0,
+        projectionVersion: TRAJECTORY_PROJECTION_VERSION,
+      })
+    } catch (error) {
+      return failure('session-not-found', String(error))
+    }
+  }
+
   @Remote('prepareFold')
   prepareFold(request: unknown): Promise<SideChatOutcome<unknown>> {
     const parsed = prepareFoldRequestSchema.safeParse(request)
@@ -584,6 +622,17 @@ export class SideChatService extends TypertRemoteService {
       if (fold === undefined) return failure('fold-not-found', 'unknown Fold preview')
       if (fold.state === 'committed' || fold.state === 'pending') return success({ state: fold.state })
       if (fold.state === 'generating') return failure('fold-generating', 'Fold preview is still being generated')
+      // Revision fencing: once a newer revision has entered the pipeline (pending or committed),
+      // an older prepared preview must not commit and preempt `current`. allowStale does not
+      // bypass this — it concerns content freshness, not version order.
+      const committedBarrier = Math.max(0, ...current.folds
+        .filter(item => item.foldId !== fold.foldId
+          && (item.state === 'pending' || item.state === 'committed')
+          && item.revisionState !== 'withdrawn')
+        .map(item => item.revision))
+      if (fold.revision < committedBarrier) {
+        return failure('fold-superseded', 'a newer Fold revision is already committed or pending; regenerate a preview from the latest state')
+      }
       if (fold.mode === 'incremental') {
         const base = current.folds.find(item => item.revision === fold.baseRevision)
         if (base === undefined || base.state !== 'committed' || base.revisionState === 'withdrawn') {
@@ -787,6 +836,30 @@ export class SideChatService extends TypertRemoteService {
       ...(request.selection === undefined ? {} : { selection: request.selection }),
       ...(request.summarySourceMessageIds === undefined ? {} : { summarySourceMessageIds: request.summarySourceMessageIds }),
     })
+    if (request.seedMode === 'trajectory') {
+      const selection = request.trajectorySelection
+      if (selection === undefined) throw new Error('trajectory selection is required')
+      if (selection.sourceSessionId !== request.parentSessionId) throw new Error('trajectory source must be the direct parent Session')
+      const currentThroughSeq = surface.capturedThroughSeq ?? surface.events.at(-1)?.seq ?? 0
+      if (selection.capturedThroughSeq > currentThroughSeq) throw new Error('trajectory capture is newer than the current Session log')
+      const snapshots = selectTrajectorySnapshots(projectTrajectory(request.parentSessionId, surface.events), selection.refs)
+      const chars = snapshots.reduce((sum, snapshot) => sum + snapshot.text.length, 0)
+      seed = {
+        ...seed,
+        trajectory: {
+          kind: 'trajectory',
+          sourceSessionId: request.parentSessionId,
+          sourceIdentity: identity(parent.meta),
+          capturedThroughSeq: surface.capturedThroughSeq ?? surface.events.at(-1)?.seq ?? 0,
+          capturedAt: Date.now(),
+          projectionVersion: TRAJECTORY_PROJECTION_VERSION,
+          snapshots,
+          chars,
+          estimatedTokens: Math.ceil(chars / 4),
+          redacted: snapshots.some(snapshot => snapshot.redacted),
+        },
+      }
+    }
     if (request.seedMode === 'task') {
       seed = {
         ...seed,

@@ -33,6 +33,7 @@ describe('SideChat slash command surface', () => {
     }
     apply(ctx as never)
     expect(commands.map(command => command.name)).toEqual([
+      'traceask',
       'side',
       'btw',
       'sideback',

@@ -16,6 +16,7 @@ export const seedModeSchema = z.union([
   z.literal('turn'),
   z.literal('selection'),
   z.literal('summary'),
+  z.literal('trajectory'),
 ])
 export type SeedMode = z.infer<typeof seedModeSchema>
 
@@ -90,6 +91,55 @@ export const sessionUsageSchema = z.object({
 })
 export type SessionUsage = z.infer<typeof sessionUsageSchema>
 
+export const trajectoryKindSchema = z.union([
+  z.literal('user'), z.literal('turn'), z.literal('request'), z.literal('assistant'),
+  z.literal('tool-call'), z.literal('tool-result'), z.literal('subagent'),
+  z.literal('error'), z.literal('fold-note'),
+])
+export type TrajectoryKind = z.infer<typeof trajectoryKindSchema>
+
+export const trajectoryChoiceSchema = z.object({
+  sourceSessionId: sessionIdSchema,
+  seq: nonNegativeIntegerSchema,
+  eventId: z.string().min(1),
+  turn: z.number().int().positive().optional(),
+  step: z.number().int().positive().optional(),
+  kind: trajectoryKindSchema,
+  label: z.string().min(1),
+  preview: z.string(),
+  chars: nonNegativeIntegerSchema,
+  estimatedTokens: nonNegativeIntegerSchema,
+  redacted: z.boolean(),
+  selectable: z.boolean(),
+  digest: z.string().min(1),
+  status: z.union([z.literal('success'), z.literal('error'), z.literal('cancelled'), z.literal('running')]).optional(),
+  durationMs: nonNegativeIntegerSchema.optional(),
+  toolName: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  parallelGroup: z.string().min(1).optional(),
+  childTurns: nonNegativeIntegerSchema.optional(),
+})
+export type TrajectoryChoice = z.infer<typeof trajectoryChoiceSchema>
+
+export const trajectorySnapshotSchema = trajectoryChoiceSchema.pick({
+  seq: true, eventId: true, turn: true, step: true, kind: true, redacted: true, digest: true,
+}).extend({ text: z.string() })
+export type TrajectorySnapshot = z.infer<typeof trajectorySnapshotSchema>
+
+export const trajectorySeedSchema = z.object({
+  kind: z.literal('trajectory'),
+  sourceSessionId: sessionIdSchema,
+  sourceIdentity: z.lazy(() => sessionIdentitySchema),
+  capturedThroughSeq: nonNegativeIntegerSchema,
+  capturedAt: nonNegativeIntegerSchema,
+  projectionVersion: z.string().min(1),
+  snapshots: z.array(trajectorySnapshotSchema).min(1).max(64),
+  chars: nonNegativeIntegerSchema,
+  estimatedTokens: nonNegativeIntegerSchema,
+  redacted: z.boolean(),
+})
+export type TrajectorySeed = z.infer<typeof trajectorySeedSchema>
+
 export const seedProvenanceSchema = z.object({
   mode: seedModeSchema,
   parentSessionId: sessionIdSchema,
@@ -113,6 +163,7 @@ export const seedProvenanceSchema = z.object({
     generatedAt: nonNegativeIntegerSchema,
     droppedOlderMessages: nonNegativeIntegerSchema,
   }).optional(),
+  trajectory: trajectorySeedSchema.optional(),
 })
 export type SeedProvenance = z.infer<typeof seedProvenanceSchema>
 
@@ -250,6 +301,16 @@ export const createSideChatRequestSchema = z.object({
     end: z.number().int().positive(),
   }).optional(),
   summarySourceMessageIds: z.array(messageIdSchema).min(1).max(8).optional(),
+  trajectorySelection: z.object({
+    sourceSessionId: sessionIdSchema,
+    capturedThroughSeq: nonNegativeIntegerSchema,
+    refs: z.array(z.object({
+      seq: nonNegativeIntegerSchema,
+      eventId: z.string().min(1),
+      kind: trajectoryKindSchema,
+      digest: z.string().min(1),
+    })).min(1).max(64),
+  }).optional(),
   modelStrategy: modelStrategySchema,
 }).superRefine((value, ctx) => {
   if (value.seedMode === 'pick:1' && value.pickMessageId === undefined) {
@@ -266,6 +327,9 @@ export const createSideChatRequestSchema = z.object({
   }
   if (value.seedMode === 'summary' && value.summarySourceMessageIds === undefined) {
     ctx.addIssue({ code: 'custom', path: ['summarySourceMessageIds'], message: 'summary seed requires source messages' })
+  }
+  if (value.seedMode === 'trajectory' && value.trajectorySelection === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['trajectorySelection'], message: 'trajectory seed requires selected event refs' })
   }
 })
 export type CreateSideChatRequest = z.infer<typeof createSideChatRequestSchema>
@@ -366,6 +430,20 @@ export const prepareFoldValueSchema = z.object({ fold: foldRecordSchema })
 export const commitOperationValueSchema = z.object({ state: operationStateSchema })
 export const setStatusValueSchema = z.object({ record: sideChatRecordSchema })
 export const listAssistantMessagesValueSchema = z.object({ items: z.array(assistantChoiceSchema) })
+export const trajectoryOverviewSchema = z.object({
+  turns: nonNegativeIntegerSchema,
+  calls: nonNegativeIntegerSchema,
+  subagents: nonNegativeIntegerSchema,
+  failures: nonNegativeIntegerSchema,
+  durationMs: nonNegativeIntegerSchema,
+  capturedThroughSeq: nonNegativeIntegerSchema,
+})
+export type TrajectoryOverview = z.infer<typeof trajectoryOverviewSchema>
+export const trajectoryItemsValueSchema = z.object({
+  items: z.array(trajectoryChoiceSchema),
+  capturedThroughSeq: nonNegativeIntegerSchema,
+  projectionVersion: z.string().min(1),
+})
 
 export interface SideChatResult<T> {
   readonly ok: true

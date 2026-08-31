@@ -55,20 +55,28 @@ export function updateCite(
   return { ...record, cites, updatedAt: Math.max(record.updatedAt, target.updatedAt) }
 }
 
-/** Promote one committed revision and preserve every older revision as immutable audit history. */
+/** Promote one committed revision and preserve every older revision as immutable audit history.
+ *  A late commit of an older prepared revision must never regress `current`: when a newer
+ *  committed revision already owns it, the target stays superseded audit instead. */
 export function promoteFoldRevision(record: SideChatRecord, foldId: string, updatedAt: number): SideChatRecord {
-  let found = false
+  const target = record.folds.find(fold => fold.foldId === foldId)
+  if (target === undefined) throw new Error(`unknown fold: ${foldId}`)
+  const newerCurrentExists = record.folds.some(fold =>
+    fold.foldId !== foldId
+    && fold.state === 'committed'
+    && fold.revisionState !== 'withdrawn'
+    && fold.revision > target.revision
+    && (fold.revisionState === 'current' || fold.revisionState === undefined))
   const folds = record.folds.map((fold) => {
     if (fold.foldId === foldId) {
-      found = true
-      return { ...fold, revisionState: 'current' as const, updatedAt }
+      return { ...fold, revisionState: newerCurrentExists ? 'superseded' as const : 'current' as const, updatedAt }
     }
+    if (newerCurrentExists) return fold
     if (fold.revisionState === 'current' || (fold.revisionState === undefined && fold.state === 'committed')) {
       return { ...fold, revisionState: 'superseded' as const, updatedAt: Math.max(fold.updatedAt, updatedAt) }
     }
     return fold
   })
-  if (!found) throw new Error(`unknown fold: ${foldId}`)
   return { ...record, folds, updatedAt: Math.max(record.updatedAt, updatedAt) }
 }
 
