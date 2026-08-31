@@ -1,5 +1,7 @@
 import type { DiffLine } from '../revision.ts'
-import type { FoldRecord, PermissionMode, SeedMode, UsageReport } from '../types.ts'
+import type { CreateSideChatRequest, FoldRecord, PermissionMode, SeedMode, TrajectoryChoice, UsageReport } from '../types.ts'
+
+export type TrajectorySelection = NonNullable<CreateSideChatRequest['trajectorySelection']>
 
 export interface FoldPreviewRequest {
   readonly sessionId: string
@@ -18,12 +20,16 @@ export type CommandWorkflowRequest =
       readonly kind: 'permission-choice'
       readonly sessionId: string
       readonly seedMode: SeedMode
+      readonly trajectorySelection?: TrajectorySelection
+      readonly trajectoryItems?: readonly TrajectoryChoice[]
     }
   | {
       readonly kind: 'create'
       readonly sessionId: string
       readonly seedMode: SeedMode
       readonly permissionMode: PermissionMode
+      readonly trajectorySelection?: TrajectorySelection
+      readonly trajectoryItems?: readonly TrajectoryChoice[]
     }
   | {
       readonly kind: 'withdraw'
@@ -50,6 +56,7 @@ const revisionComparisonListeners = new Map<string, Set<(request: RevisionCompar
 const refreshListeners = new Map<string, Set<() => void>>()
 const usageListeners = new Map<string, Set<(report: UsageReport) => void>>()
 const commandWorkflowListeners = new Map<string, Set<(request: CommandWorkflowRequest) => void>>()
+const trajectoryPanelListeners = new Map<string, Set<() => void>>()
 
 export function showFoldPreview(request: FoldPreviewRequest): boolean {
   const listeners = foldPreviewListeners.get(request.sessionId)
@@ -135,5 +142,22 @@ export function onCommandWorkflow(
   return () => {
     listeners.delete(listener)
     if (listeners.size === 0) commandWorkflowListeners.delete(sessionId)
+  }
+}
+
+export function showTrajectoryPanel(sessionId: string): boolean {
+  const listeners = trajectoryPanelListeners.get(sessionId)
+  if (listeners === undefined || listeners.size === 0) return false
+  for (const listener of listeners) listener()
+  return true
+}
+
+export function onTrajectoryPanelRequest(sessionId: string, listener: () => void): () => void {
+  const listeners = trajectoryPanelListeners.get(sessionId) ?? new Set()
+  listeners.add(listener)
+  trajectoryPanelListeners.set(sessionId, listeners)
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) trajectoryPanelListeners.delete(sessionId)
   }
 }

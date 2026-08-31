@@ -12,6 +12,7 @@ import { diffFoldText } from '../revision.ts'
 import { SideChatApi } from './api.ts'
 import { SideChatHeaderActions, SideChatsView } from './components.tsx'
 import { SideChatWorkflowHost } from './workflow-dialogs.tsx'
+import { TrajectoryPanel } from './trajectory-panel.tsx'
 import { en, NS, zh } from './locales.ts'
 import { installStyles } from './styles.ts'
 import {
@@ -20,6 +21,7 @@ import {
   showFoldPreview,
   showRevisionComparison,
   showUsageReport,
+  showTrajectoryPanel,
   type CommandWorkflowRequest,
 } from './workflow-events.ts'
 
@@ -87,6 +89,14 @@ export function apply(ctx: Context): void {
     inject: () => injected,
   }, SideChatWorkflowHost))
 
+  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
+    name: 'conversation.session.header.actions',
+    id: 'sidechat-trajectory-panel',
+    order: 32,
+    locale: NS,
+    inject: () => injected,
+  }, TrajectoryPanel))
+
   ctx.slots.inject('conversation.view', () => ctx.slots.register({
     name: 'conversation.view',
     id: 'sidechats',
@@ -95,6 +105,19 @@ export function apply(ctx: Context): void {
     label: () => t('view.children'),
     inject: () => injected,
   }, SideChatsView))
+
+  ctx.effect(() => ctx.commandUi.register({
+    name: 'traceask',
+    description: '打开当前 Session 的轨迹可视化并选择事件发起 SideChat 提问',
+    available: () => true,
+    ui: {
+      kind: 'popupSelect',
+      options: async () => [{ id: 'open', label: '打开轨迹分析', detail: '选择 Host 脱敏后的轨迹事件并发起 SideChat' }],
+      onSelect: (_option, session) => {
+        if (!showTrajectoryPanel(session.sessionId)) throw new Error('轨迹界面尚未就绪，请保持当前 Session 页面打开后重试')
+      },
+    },
+  }), 'sidechat: /traceask')
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'side',
@@ -465,3 +488,4 @@ export function apply(ctx: Context): void {
 export { SideChatApi } from './api.ts'
 export { SideChatHeaderActions, SideChatsView } from './components.tsx'
 export { SideChatWorkflowHost } from './workflow-dialogs.tsx'
+export { TrajectoryPanel } from './trajectory-panel.tsx'

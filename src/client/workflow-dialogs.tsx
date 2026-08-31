@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
@@ -7,6 +8,7 @@ import type {
   PermissionMode,
   SeedMessage,
   SeedMode,
+  TrajectoryChoice,
 } from '../types.ts'
 import { seedStats } from '../seed.ts'
 import type { CommonInjected } from './components.tsx'
@@ -33,6 +35,7 @@ const SEED_LABELS: Record<SeedMode, string> = {
   turn: '选择 Turn',
   selection: '文本片段',
   summary: 'Seed 摘要',
+  trajectory: '所选轨迹',
 }
 
 const PERMISSION_OPTIONS: ReadonlyArray<{
@@ -92,7 +95,7 @@ function DialogShell({
   readonly children: ReactNode
   readonly onClose: () => void
 }) {
-  return (
+  return createPortal(
     <div className="dsh-sidechat-dialog-backdrop" role="presentation">
       <section
         className={`dsh-sidechat-dialog dsh-sidechat-workflow${className === undefined ? '' : ` ${className}`}`}
@@ -112,7 +115,8 @@ function DialogShell({
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -229,6 +233,10 @@ export function SideChatWorkflowHost({ sessionId, api, openSession, refreshSessi
     return seedChoices.filter(item => selectedIds.has(item.messageId))
   }, [seedChoices, selectedIds, selectedTurn, selectionEnd, selectionMessageId, selectionStart, workflow])
 
+  const trajectoryItems: readonly TrajectoryChoice[] = workflow?.kind === 'create'
+    ? workflow.trajectoryItems ?? []
+    : []
+
   const close = () => { if (!busy) setWorkflow(null) }
 
   const setNotice = (title: string, message: string, tone: 'success' | 'warning' | 'error' = 'success') => {
@@ -242,7 +250,7 @@ export function SideChatWorkflowHost({ sessionId, api, openSession, refreshSessi
     if (workflow?.kind !== 'create' || busy) return
     const trimmedQuestion = question.trim()
     if (trimmedQuestion === '') { setError('请输入要澄清的问题'); return }
-    let seedOptions: Pick<CreateSideChatRequest, 'pickMessageId' | 'selectedMessageIds' | 'turn' | 'selection' | 'summarySourceMessageIds'> = {}
+    let seedOptions: Pick<CreateSideChatRequest, 'pickMessageId' | 'selectedMessageIds' | 'turn' | 'selection' | 'summarySourceMessageIds' | 'trajectorySelection'> = {}
     if (workflow.seedMode === 'pick:1') {
       const id = previewMessages[0]?.messageId
       if (id === undefined) { setError('请选择一条消息'); return }
@@ -260,6 +268,9 @@ export function SideChatWorkflowHost({ sessionId, api, openSession, refreshSessi
       const picked = previewMessages[0]
       if (picked?.selection === undefined) { setError('请输入有效的文本字符区间'); return }
       seedOptions = { selection: { messageId: picked.messageId, ...picked.selection } }
+    } else if (workflow.seedMode === 'trajectory') {
+      if (workflow.trajectorySelection === undefined || trajectoryItems.length === 0) { setError('请至少选择一项轨迹内容'); return }
+      seedOptions = { trajectorySelection: workflow.trajectorySelection }
     }
     setBusy(true)
     setError(null)
@@ -340,6 +351,8 @@ export function SideChatWorkflowHost({ sessionId, api, openSession, refreshSessi
         sessionId: workflow.sessionId,
         seedMode: workflow.seedMode,
         permissionMode,
+        ...(workflow.trajectorySelection === undefined ? {} : { trajectorySelection: workflow.trajectorySelection }),
+        ...(workflow.trajectoryItems === undefined ? {} : { trajectoryItems: workflow.trajectoryItems }),
       })
     }
     return (
@@ -494,6 +507,23 @@ export function SideChatWorkflowHost({ sessionId, api, openSession, refreshSessi
         {mode === 'task' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">会额外调用一次父会话最近实际模型，生成不超过 500 token 的 Task 式最小上下文；不会写入、唤醒或推进父会话。</p>}
         {mode === 'summary' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">会额外调用一次 B 继承的父会话模型生成不超过 500 token 的 Seed 摘要；原始选择仅冻结在 provenance。</p>}
         {mode === 'none' && <p className="dsh-sidechat-muted">不复制任何父会话文本，只把澄清问题发送给 B。</p>}
+        {mode === 'trajectory' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">轨迹是 Host 脱敏后的不可信背景，不会增加 B 的工具、沙箱或审批权限。</p>}
+
+        {mode === 'trajectory' && (
+          <section className="dsh-sidechat-seed-preview">
+            <div className="dsh-sidechat-seed-header">
+              <h3>不可变轨迹快照</h3>
+              <span className="dsh-sidechat-seed-token">{trajectoryItems.length} 项 · {trajectoryItems.reduce((sum, item) => sum + item.chars, 0).toLocaleString()} chars · 约 {trajectoryItems.reduce((sum, item) => sum + item.estimatedTokens, 0).toLocaleString()} token</span>
+            </div>
+            <div className="dsh-sidechat-seed-scroll">
+              {trajectoryItems.map(item => <div className="dsh-sidechat-seed-bubble" key={item.eventId}>
+                <span className="dsh-sidechat-seed-role" aria-hidden="true">T</span>
+                <span className="dsh-sidechat-seed-message"><strong>{item.kind} · seq {item.seq}</strong> {item.preview}</span>
+              </div>)}
+            </div>
+            <p className="dsh-sidechat-freeze-note"><span aria-hidden="true">🔒</span>Host 会按 seq、eventId 与 digest 重新校验并冻结快照</p>
+          </section>
+        )}
 
         {choicesLoading && <p>正在读取可用 Seed 消息…</p>}
         {error?.startsWith('无法读取 Seed 候选：') === true && (

@@ -35,8 +35,8 @@ const client: UserConfig = {
   sourcemap: true,
   dts: false,
   deps: {
-    neverBundle: specifier => specifier === 'react' || specifier === 'react/jsx-runtime',
-    alwaysBundle: specifier => specifier !== 'react' && specifier !== 'react/jsx-runtime',
+    neverBundle: specifier => specifier === 'react' || specifier === 'react/jsx-runtime' || specifier === 'react-dom',
+    alwaysBundle: specifier => specifier !== 'react' && specifier !== 'react/jsx-runtime' && specifier !== 'react-dom',
   },
   outputOptions: {
     exports: 'named',

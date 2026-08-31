@@ -30,6 +30,7 @@
     "src/client/styles.ts",
     "src/client/locales.ts"
     ,"src/client/workflow-events.ts"
+    ,"src/client/trajectory-panel.tsx"
     ,"src/types.ts",
     "src/seed.ts",
     "src/revision.ts"

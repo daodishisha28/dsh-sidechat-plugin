@@ -38,5 +38,6 @@
     "src/relations.ts"
     ,"src/task-seed.ts"
     ,"src/usage.ts"
+    ,"src/trajectory.ts"
   ]
 }
