@@ -45,7 +45,7 @@ Header 现只保留 SideChat badge、状态、revision 和父会话导航。创�
 
 OpenCode 原生 `task()` 的 prompt 由正在运行的父 Agent 在调用工具时自然写出，child 不自动继承 transcript。DSH 的 `/side task` 是手动 UI 命令，无法安全复用一个正在生成中的父 Agent 调用，因此采用一次独立的父 route 模型请求：输入为父 surface 中从新到旧、完整消息组成的不超过 12,000 字符/约 3,000 token 窗口，输出不超过 500 token。该调用没有 tools，不调用 followup/steer，不写 A；失败不创建 B。原始输入窗口和输出、route、usage 一起冻结到 provenance，B transcript 只接收生成上下文和澄清问题。
 
-`/sideusage` 不采用 UI 上的字符估算。它复用 DSH token-meter 的完整 turn 归并语义；未完成 turn、缺失 provider usage、旧记录没有父基线时均标为不完整或不可得。Fold 模型生成是 B 的普通 turn，Fold/Cite 的 no-reply 父投递是零模型调用。
+`/sideusage` 不采用 UI 上的字符估算。它复用 DSH token-meter 的完整 turn 归并语义；未完成 turn、缺失 provider usage、旧记录没有父基线时均标为不完整或不可得。Fold 模型生成是 B 的普通 turn，Fold/Cite 的 no-reply append 本身不启动父 turn；若 Fold 追加将达到 `foldAppendThresholdRatio`，SideChat 会先调用 DSH 显式压缩父会话旧历史，该压缩通常包含一次独立模型调用。
 
 ## 设计偏差与不可用 API
 

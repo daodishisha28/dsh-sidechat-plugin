@@ -125,7 +125,7 @@ describe('SideChat Client slots', () => {
     expect(await screen.findByRole('dialog', { name: 'SideChat 用量' })).toBeTruthy()
     expect(screen.getAllByText('20').length).toBeGreaterThan(0)
     expect(screen.getByText(/不可得/u)).toBeTruthy()
-    expect(screen.getByText(/零模型调用/u)).toBeTruthy()
+    expect(screen.getByText(/append 自身模型调用：0/u)).toBeTruthy()
   })
 
   it('renders the parent child-session catalog with status, revision and model', async () => {

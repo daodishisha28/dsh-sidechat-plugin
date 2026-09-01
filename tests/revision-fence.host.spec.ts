@@ -69,9 +69,10 @@ function makeHarness(table: MemoryTable) {
     status: 'idle' as const,
     session: {
       id: 'parent', header: header('parent', 1), events: parentEvents,
+      requestContext: () => ({ provider: 'mock', model: 'm', contextWindow: 1_000 }),
       append: (type: string, data: unknown) => { parentEvents.push(event(parentEvents.length + 1, type, data)) },
     },
-    ctx: { tools: { schemas: () => [] } },
+    ctx: { tools: { schemas: () => [] }, compaction: { compactNow: vi.fn(async () => null) } },
     whenIdle: vi.fn(async () => undefined),
     runMaintenance: vi.fn(async (task: (signal: AbortSignal) => Promise<void>) => task(new AbortController().signal)),
   }
@@ -88,6 +89,7 @@ function makeHarness(table: MemoryTable) {
   const ctx = new Context()
   ctx.provide('sessionController', sessionController)
   ctx.provide('sessions', { flush })
+  ctx.provide('tokenMeter', { measure: () => ({ totalTokens: 0 }), estimateMessage: () => 50 })
   const service = new SideChatService(ctx)
   Object.defineProperty(service, 'table', { value: table, writable: true })
   return { service, table, parentEvents, flush }

@@ -21,6 +21,7 @@
       name: dsh-sidechat-plugin
       config:
         foldMaxTokens: 500
+        foldAppendThresholdRatio: 0.8
         citeMaxTokens: 500
         readMaxMessages: 5
         readMaxChars: 20000

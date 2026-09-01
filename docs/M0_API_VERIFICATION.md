@@ -17,7 +17,7 @@
 | 当前 transcript surface | `sessionQuery.readSurface()` 返回 compaction 后可见 surface | Seed tail/pick 只从 surface 抽取直接 user/assistant 文本 |
 | 持久化 sidecar | `storageDomain.open(defineDomain(...))`；`KvTable.update()` 串行原子更新单行 | 每个 child 一个聚合行，关系、Seed、Fold、Cite 和幂等状态同一原子记录 |
 | 核心消息 | `user/message` 是已知事件；`MessageSourceMap.plugin` 是内置 source | Seed、Fold、Cite 只追加 plugin-source `user/message` |
-| 安全 no-reply append | `Agent.runMaintenance()` 只在真正 idle 执行非 turn 任务；`Session.append()` + `sessions.flush()` | A running 时登记 pending，后台等 idle 后 maintenance append；不调用模型、不 followup、不 steer |
+| 安全 no-reply append | `Agent.runMaintenance()` 只在真正 idle 执行非 turn 任务；`Session.append()` + `sessions.flush()` | A running 时登记 pending，后台等 idle 后 maintenance append；append 本身不启动父 turn、不 followup、不 steer。Fold 达到压力阈值时先在 maintenance 外显式压缩父历史，该压缩可能独立调用模型 |
 | Fold 生成 | `Agent.followup(createUserMessage(...))` 可让 B 正常启动模型 turn；`whenIdle()` 等待完成 | Fold 请求作为 B 内 plugin-source `user/message`，模型回复仍是普通 assistant message |
 | Agent preset | bundle 可给 `agent-presets.roots` 增加 system root；v0.3.4 进一步核验 agent-scoped `tools.restrict()`、sandbox/approval session setter 与 `AgentPresets.composedPreset()` | `sidechat-clarifier` 提供只读候选工具，Host 取父可见工具交集并固定 read-only/never；继承模式按父 preset 与有效策略冻结 |
 | Web UI slot | `conversation.view`、`conversation.session.header.actions`、`conversation.chat.assistant-actions` 均为 public list slot | 子会话页签和 Header 身份信息；v0.3.0 已完成命令迁移，不再注入 assistant 引用按钮 |

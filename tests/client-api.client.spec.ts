@@ -15,6 +15,22 @@ describe('Client authenticated SideChat RPC bridge', () => {
     await expect(new SideChatApi(ctx as never).get('s1')).rejects.toThrow('gone')
   })
 
+  it('reads full tool detail only through an exact immutable trajectory ref', async () => {
+    const value = {
+      seq: 4, eventId: 'call-1', kind: 'tool-call', digest: 'digest-1',
+      text: '{"apiKey":"visible"}', chars: 20, estimatedTokens: 5, redacted: false,
+    }
+    const call = vi.fn(async () => ({ ok: true, value: { ok: true, value } }))
+    const api = new SideChatApi({ get: () => ({ rpc: { call } }) } as never)
+    await expect(api.trajectoryDetail('parent', {
+      seq: 4, eventId: 'call-1', kind: 'tool-call', digest: 'digest-1',
+    })).resolves.toEqual(value)
+    expect(call).toHaveBeenCalledWith('/sidechat', 'trajectoryDetail', { request: {
+      sessionId: 'parent',
+      ref: { seq: 4, eventId: 'call-1', kind: 'tool-call', digest: 'digest-1' },
+    } }, expect.any(AbortSignal))
+  })
+
   it('uses the M2 tree, revision, withdrawal and cross-parent Cite wire contracts', async () => {
     const call = vi.fn(async (_path, method: string) => ({
       ok: true,

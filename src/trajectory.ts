@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { TrajectoryChoice, TrajectoryOverview, TrajectorySnapshot } from './types.ts'
+import type { TrajectoryChoice, TrajectoryDetail, TrajectoryKind, TrajectoryOverview, TrajectorySnapshot } from './types.ts'
 
-export const TRAJECTORY_PROJECTION_VERSION = 'trajectory-v1'
+export const TRAJECTORY_PROJECTION_VERSION = 'trajectory-v2'
 export const TRAJECTORY_MAX_ITEMS = 64
 export const TRAJECTORY_MAX_CHARS = 32_000
 export const TRAJECTORY_MAX_TOKENS = 8_000
+export const TRAJECTORY_PREVIEW_MAX_CHARS = 4_000
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined
@@ -76,6 +77,17 @@ function safeProjection(value: unknown, depth = 0): { value: unknown; redacted: 
   return { value: output, redacted }
 }
 
+function rawToolText(value: unknown): string {
+  if (typeof value === 'string') return value
+  const serialized = JSON.stringify(value, null, 2)
+  return serialized ?? String(value)
+}
+
+function boundedPreview(text: string): { preview: string; truncated: boolean } {
+  if (text.length <= TRAJECTORY_PREVIEW_MAX_CHARS) return { preview: text, truncated: false }
+  return { preview: `${text.slice(0, TRAJECTORY_PREVIEW_MAX_CHARS)}\n…[预览已截断，打开详情查看完整内容]`, truncated: true }
+}
+
 function digest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
@@ -89,15 +101,34 @@ function statusOf(data: Record<string, unknown>): TrajectoryChoice['status'] {
   return 'success'
 }
 
-function makeChoice(input: Omit<TrajectoryChoice, 'chars' | 'estimatedTokens' | 'digest'>): TrajectoryChoice {
-  const chars = input.preview.length
-  return { ...input, chars, estimatedTokens: Math.ceil(chars / 4), digest: digest({ version: TRAJECTORY_PROJECTION_VERSION, ...input }) }
+function makeChoice(
+  input: Omit<TrajectoryChoice, 'chars' | 'estimatedTokens' | 'digest' | 'truncated' | 'fullContentAvailable'>,
+  fullText = input.preview,
+  options: { truncated?: boolean; fullContentAvailable?: boolean } = {},
+): TrajectoryChoice {
+  const chars = fullText.length
+  return {
+    ...input,
+    chars,
+    estimatedTokens: Math.ceil(chars / 4),
+    truncated: options.truncated ?? false,
+    fullContentAvailable: options.fullContentAvailable ?? false,
+    digest: digest({ version: TRAJECTORY_PROJECTION_VERSION, ...input, fullText }),
+  }
 }
 
 function idOf(event: SessionEvent, suffix?: string): string {
   const data = object(event.data)
   const explicit = string(data?.['eventId']) ?? string(data?.['id']) ?? string(object(data?.['message'])?.['id'])
   return suffix === undefined ? explicit ?? `${event.type}:${event.seq}` : `${explicit ?? `${event.type}:${event.seq}`}:${suffix}`
+}
+
+function sideChatContextLabel(text: string): string | undefined {
+  const marker = /^\[SideChat\s+(fold-withdrawal|fold|cite)\b/iu.exec(text)?.[1]?.toLowerCase()
+  if (marker === 'fold-withdrawal') return '↩ SideChat Fold 撤回'
+  if (marker === 'fold') return '↩ SideChat Fold'
+  if (marker === 'cite') return '↩ SideChat Cite'
+  return /Fold 回流/iu.test(text) ? '↩ SideChat Fold' : undefined
 }
 
 export function projectTrajectory(sourceSessionId: string, events: readonly SessionEvent[]): TrajectoryChoice[] {
@@ -126,9 +157,10 @@ export function projectTrajectory(sourceSessionId: string, events: readonly Sess
     if (event.type === 'user/message') {
       const source = object(data['source'])
       const raw = contentText(data['content'])
-      if (source?.['kind'] === 'plugin' && /\[SideChat (?:Fold|Withdrawal)|Fold 回流/iu.test(raw)) {
+      const contextLabel = source?.['kind'] === 'plugin' ? sideChatContextLabel(raw) : undefined
+      if (contextLabel !== undefined) {
         const clean = sanitizeText(raw)
-        push(makeChoice({ sourceSessionId, seq: event.seq, eventId: idOf(event), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: 'fold-note', label: '↩ Fold 回流', preview: clean.text, redacted: clean.redacted, selectable: false, status: 'success' }))
+        push(makeChoice({ sourceSessionId, seq: event.seq, eventId: idOf(event), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: 'fold-note', label: contextLabel, preview: clean.text, redacted: clean.redacted, selectable: false, status: 'success' }))
       } else if (source?.['kind'] === 'user' && raw !== '') {
         const clean = sanitizeText(raw)
         push(makeChoice({ sourceSessionId, seq: event.seq, eventId: idOf(event), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: 'user', label: raw.replace(/\s+/gu, ' ').slice(0, 72), preview: clean.text, redacted: clean.redacted, selectable: true, status: 'success' }))
@@ -148,10 +180,10 @@ export function projectTrajectory(sourceSessionId: string, events: readonly Sess
         const item = object(block)
         if (item?.['type'] !== 'tool-call') return
         const name = string(item['name']) ?? 'tool'
-        const projected = safeProjection(item['arguments'] ?? item['input'] ?? {})
-        const preview = JSON.stringify(projected.value, null, 2)
+        const fullText = rawToolText(item['arguments'] ?? item['input'] ?? {})
+        const { preview, truncated } = boundedPreview(fullText)
         const subagent = /^(?:task|agent|subagent)$/iu.test(name)
-        push(makeChoice({ sourceSessionId, seq: event.seq, eventId: string(item['id']) ?? idOf(event, `call-${index}`), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: subagent ? 'subagent' : 'tool-call', label: subagent ? `Task: ${name}` : name, preview, redacted: projected.redacted, selectable: true, toolName: name, parallelGroup: `step-${turn ?? 0}-${step ?? event.seq}`, status: 'running', ...(subagent ? { childTurns: number(item['turns']) ?? 0 } : {}) }))
+        push(makeChoice({ sourceSessionId, seq: event.seq, eventId: string(item['id']) ?? idOf(event, `call-${index}`), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: subagent ? 'subagent' : 'tool-call', label: subagent ? `Task: ${name}` : name, preview, redacted: false, selectable: true, toolName: name, parallelGroup: `step-${turn ?? 0}-${step ?? event.seq}`, status: 'running', ...(subagent ? { childTurns: number(item['turns']) ?? 0 } : {}) }, fullText, { truncated, fullContentAvailable: true }))
       })
       const raw = contentText(message['content'])
       if (raw !== '') {
@@ -161,10 +193,11 @@ export function projectTrajectory(sourceSessionId: string, events: readonly Sess
       continue
     }
     if (event.type === 'tool/result' || /tool.*result/iu.test(event.type)) {
-      const projected = safeProjection(data['content'] ?? data['result'] ?? data)
+      const fullText = rawToolText(data['content'] ?? data['result'] ?? data)
+      const { preview, truncated } = boundedPreview(fullText)
       const toolName = string(data['name']) ?? string(data['toolName']) ?? 'tool result'
       const status = statusOf(data) ?? (data['error'] === undefined ? 'success' : 'error')
-      push(makeChoice({ sourceSessionId, seq: event.seq, eventId: idOf(event), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: status === 'error' ? 'error' : 'tool-result', label: toolName, preview: typeof projected.value === 'string' ? projected.value : JSON.stringify(projected.value, null, 2), redacted: projected.redacted, selectable: true, toolName, status }))
+      push(makeChoice({ sourceSessionId, seq: event.seq, eventId: idOf(event), ...(turn === undefined ? {} : { turn }), ...(step === undefined ? {} : { step }), kind: status === 'error' ? 'error' : 'tool-result', label: toolName, preview, redacted: false, selectable: true, toolName, status }, fullText, { truncated, fullContentAvailable: true }))
       continue
     }
     if (/model.*request|request.*model/iu.test(event.type)) {
@@ -199,12 +232,61 @@ export function trajectoryOverview(items: readonly TrajectoryChoice[], events: r
   }
 }
 
-export function selectTrajectorySnapshots(items: readonly TrajectoryChoice[], refs: readonly { seq: number; eventId: string; kind: string; digest: string }[]): TrajectorySnapshot[] {
+function exactToolText(event: SessionEvent, eventId: string, kind: TrajectoryKind): string | undefined {
+  const data = object(event.data) ?? {}
+  if (kind === 'tool-call' || kind === 'subagent') {
+    if (event.type !== 'assistant/message') return undefined
+    const message = object(data['message']) ?? data
+    const blocks = Array.isArray(message['content']) ? message['content'] : []
+    for (let index = 0; index < blocks.length; index += 1) {
+      const item = object(blocks[index])
+      if (item?.['type'] !== 'tool-call') continue
+      const candidateId = string(item['id']) ?? idOf(event, `call-${index}`)
+      if (candidateId === eventId) return rawToolText(item['arguments'] ?? item['input'] ?? {})
+    }
+    return undefined
+  }
+  if (kind !== 'tool-result' && kind !== 'error') return undefined
+  if (event.type !== 'tool/result' && !/tool.*result/iu.test(event.type)) return undefined
+  if (idOf(event) !== eventId) return undefined
+  return rawToolText(data['content'] ?? data['result'] ?? data)
+}
+
+export function trajectoryDetail(
+  items: readonly TrajectoryChoice[],
+  events: readonly SessionEvent[],
+  ref: { seq: number; eventId: string; kind: TrajectoryKind; digest: string },
+): TrajectoryDetail {
+  const catalog = new Map(items.map(item => [`${item.seq}:${item.eventId}`, item]))
+  const item = catalog.get(`${ref.seq}:${ref.eventId}`)
+  if (item === undefined || item.kind !== ref.kind || item.digest !== ref.digest) throw new Error(`trajectory item ${ref.eventId} is stale or unavailable; refresh the trajectory`)
+  if (!item.fullContentAvailable) throw new Error(`trajectory item ${ref.eventId} has no separately readable full content`)
+  const event = events.find(candidate => candidate.seq === item.seq)
+  const text = event === undefined ? undefined : exactToolText(event, item.eventId, item.kind)
+  if (text === undefined) throw new Error(`trajectory item ${ref.eventId} raw content is unavailable; refresh the trajectory`)
+  return {
+    seq: item.seq,
+    eventId: item.eventId,
+    kind: item.kind,
+    digest: item.digest,
+    text,
+    chars: text.length,
+    estimatedTokens: Math.ceil(text.length / 4),
+    redacted: false,
+  }
+}
+
+export function selectTrajectorySnapshots(
+  items: readonly TrajectoryChoice[],
+  events: readonly SessionEvent[],
+  refs: readonly { seq: number; eventId: string; kind: TrajectoryKind; digest: string }[],
+): TrajectorySnapshot[] {
   const catalog = new Map(items.map(item => [`${item.seq}:${item.eventId}`, item]))
   const snapshots = refs.map(ref => {
     const item = catalog.get(`${ref.seq}:${ref.eventId}`)
     if (item === undefined || !item.selectable || item.kind !== ref.kind || item.digest !== ref.digest) throw new Error(`trajectory item ${ref.eventId} is stale or unavailable; refresh the trajectory`)
-    return { seq: item.seq, eventId: item.eventId, ...(item.turn === undefined ? {} : { turn: item.turn }), ...(item.step === undefined ? {} : { step: item.step }), kind: item.kind, text: item.preview, redacted: item.redacted, digest: item.digest }
+    const text = item.fullContentAvailable ? trajectoryDetail(items, events, ref).text : item.preview
+    return { seq: item.seq, eventId: item.eventId, ...(item.turn === undefined ? {} : { turn: item.turn }), ...(item.step === undefined ? {} : { step: item.step }), kind: item.kind, text, redacted: item.redacted, digest: item.digest }
   })
   const chars = snapshots.reduce((sum, item) => sum + item.text.length, 0)
   if (snapshots.length > TRAJECTORY_MAX_ITEMS || chars > TRAJECTORY_MAX_CHARS || Math.ceil(chars / 4) > TRAJECTORY_MAX_TOKENS) throw new Error('selected trajectory exceeds the 8k token budget')

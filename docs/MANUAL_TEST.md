@@ -97,7 +97,7 @@
 
 - 在完成至少两个 B turn 后运行 `/sideusage`，B 累计值等于完整 turn 的 uncached input、cache read/write、output、reasoning 和 total 之和；最近 turn 单独显示；
 - 使用 `task` 或 `summary` 创建时，报告单列这次额外调用的父/B route 与实际 provider usage；普通 tail/none Seed 不伪造额外调用；
-- Fold 生成 turn 计入 B；Fold/Cite no-reply 投递明确显示 `0（零模型调用）`；
+- Fold 生成 turn 计入 B；Fold/Cite no-reply append 自身模型调用显示 `0`；另行确认 Fold 超阈值时可能出现父历史压缩模型调用；
 - B 创建后继续在 A 对话，父会话增量只统计创建基线之后的完整 turn；
 - 在 B 正在生成时查看，报告标为“不完整”；旧 `0.2.x` 记录没有基线时显示“不可得”，不能显示为零；
 - provider 缺失 cache/reasoning/total 字段时，对应字段显示“不可得”，不使用字符估算冒充精确 usage。

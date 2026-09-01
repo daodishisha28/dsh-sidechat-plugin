@@ -110,6 +110,8 @@ export const trajectoryChoiceSchema = z.object({
   chars: nonNegativeIntegerSchema,
   estimatedTokens: nonNegativeIntegerSchema,
   redacted: z.boolean(),
+  truncated: z.boolean(),
+  fullContentAvailable: z.boolean(),
   selectable: z.boolean(),
   digest: z.string().min(1),
   status: z.union([z.literal('success'), z.literal('error'), z.literal('cancelled'), z.literal('running')]).optional(),
@@ -120,6 +122,26 @@ export const trajectoryChoiceSchema = z.object({
   childTurns: nonNegativeIntegerSchema.optional(),
 })
 export type TrajectoryChoice = z.infer<typeof trajectoryChoiceSchema>
+
+export const trajectoryItemRefSchema = z.object({
+  seq: nonNegativeIntegerSchema,
+  eventId: z.string().min(1),
+  kind: trajectoryKindSchema,
+  digest: z.string().min(1),
+})
+
+export const trajectoryDetailRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  ref: trajectoryItemRefSchema,
+})
+
+export const trajectoryDetailSchema = trajectoryItemRefSchema.extend({
+  text: z.string(),
+  chars: nonNegativeIntegerSchema,
+  estimatedTokens: nonNegativeIntegerSchema,
+  redacted: z.boolean(),
+})
+export type TrajectoryDetail = z.infer<typeof trajectoryDetailSchema>
 
 export const trajectorySnapshotSchema = trajectoryChoiceSchema.pick({
   seq: true, eventId: true, turn: true, step: true, kind: true, redacted: true, digest: true,
@@ -304,12 +326,7 @@ export const createSideChatRequestSchema = z.object({
   trajectorySelection: z.object({
     sourceSessionId: sessionIdSchema,
     capturedThroughSeq: nonNegativeIntegerSchema,
-    refs: z.array(z.object({
-      seq: nonNegativeIntegerSchema,
-      eventId: z.string().min(1),
-      kind: trajectoryKindSchema,
-      digest: z.string().min(1),
-    })).min(1).max(64),
+    refs: z.array(trajectoryItemRefSchema).min(1).max(64),
   }).optional(),
   modelStrategy: modelStrategySchema,
 }).superRefine((value, ctx) => {

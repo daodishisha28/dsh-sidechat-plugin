@@ -507,7 +507,7 @@ export function SideChatWorkflowHost({ sessionId, api, openSession, refreshSessi
         {mode === 'task' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">会额外调用一次父会话最近实际模型，生成不超过 500 token 的 Task 式最小上下文；不会写入、唤醒或推进父会话。</p>}
         {mode === 'summary' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">会额外调用一次 B 继承的父会话模型生成不超过 500 token 的 Seed 摘要；原始选择仅冻结在 provenance。</p>}
         {mode === 'none' && <p className="dsh-sidechat-muted">不复制任何父会话文本，只把澄清问题发送给 B。</p>}
-        {mode === 'trajectory' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">轨迹是 Host 脱敏后的不可信背景，不会增加 B 的工具、沙箱或审批权限。</p>}
+        {mode === 'trajectory' && <p className="dsh-sidechat-notice dsh-sidechat-notice-warning">轨迹是 Host 校验后的不可信背景；工具调用与结果按原文加入，可能包含敏感信息，但不会增加 B 的工具、沙箱或审批权限。</p>}
 
         {mode === 'trajectory' && (
           <section className="dsh-sidechat-seed-preview">
