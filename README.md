@@ -170,7 +170,7 @@ dsh plugin --profile web remove dsh-sidechat-plugin
 - Session log 不写入 `sidechat/*` 自定义事件；
 - 持久化 SideChat 内容只使用 DSH 已知 `user/message` 和正常 `assistant/message`；
 - Fold/Cite 通过 `Agent.runMaintenance()` 等待父会话真正 idle 后 no-reply append；
-- Fold/Cite 不调用父模型、不创建父 turn、不 followup、不 steer；
+- Fold/Cite 投递本身不创建父 turn、不 followup、不 steer；Fold 追加后若将达到配置的上下文占用阈值，会先退出 maintenance、显式压缩父会话旧历史、重新测量，再完整追加 Fold。该压缩通常会产生一次独立的压缩模型调用；Cite/撤回不走此压力保护；
 - Host 重新验证 parent、child、workspace、lifecycle identity、message ID 和 revision；
 - Seed、Recall、Cite 与 Fold 内容始终按不可信背景处理；
 - orphaned SideChat 可以读取，但不能再向不存在的原父会话 Fold 或 Cite。
@@ -184,6 +184,7 @@ Fold/Cite 使用 domain pending → 安全 append/flush → domain committed 三
 | 配置 | 默认值 | 说明 |
 |---|---:|---|
 | `foldMaxTokens` | `500` | Fold 最大输出预算 |
+| `foldAppendThresholdRatio` | `0.8` | Fold 完整追加后的父上下文占用阈值；达到阈值时先压缩旧历史并重测，仍超阈值则不追加 |
 | `citeMaxTokens` | `500` | Cite 最大文本预算 |
 | `readMaxMessages` | `5` | 一次精确 Recall 最大消息数 |
 | `readMaxChars` | `20000` | 一次精确 Recall 最大字符数 |

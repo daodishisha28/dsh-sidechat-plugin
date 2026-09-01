@@ -251,7 +251,7 @@ export function SideChatHeaderActions({ sessionId, api, openSession, identityCha
               usage={usage.parentDeltaSinceCreate.available ? usage.parentDeltaSinceCreate.totals : undefined}
             />
             <p className="dsh-sidechat-muted">
-              Fold/Cite no-reply 投递模型调用：{usage.noReplyModelCalls}（零模型调用）
+              Fold/Cite no-reply append 自身模型调用：{usage.noReplyModelCalls}（Fold 超阈值时的父历史压缩可能另有模型调用）
               {usage.seedGeneration !== undefined && <>；Seed 额外调用：{usage.seedGeneration.model === undefined ? '模型不可得' : `${usage.seedGeneration.model.provider}/${usage.seedGeneration.model.model}`}，Input {usageCount(usage.seedGeneration.usage?.inputTokens)} · Output {usageCount(usage.seedGeneration.usage?.outputTokens)} · Total {usageCount(usage.seedGeneration.usage?.totalTokens)}</>}
             </p>
             <footer className="dsh-sidechat-dialog-footer"><span className="dsh-sidechat-keyboard-hint"><kbd>Esc</kbd> 关闭</span><button className="dsh-sidechat-button dsh-sidechat-button-secondary" type="button" onClick={() => { setUsage(null) }}>关闭</button></footer>

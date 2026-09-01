@@ -113,6 +113,12 @@ declare module '@deepseek-ai/dsh-session' {
     readonly type: string
     readonly data: any
   }
+
+  export interface RequestContext {
+    readonly provider: string
+    readonly model: string
+    readonly contextWindow?: number
+  }
 }
 
 declare module '@deepseek-ai/dsh-session/types' {
@@ -148,12 +154,14 @@ declare module '@deepseek-ai/dsh-agent' {
     readonly header: SessionHeader
     readonly events: SessionEvent[]
     append(type: string, data: unknown, options?: unknown): void
+    requestContext(): import('@deepseek-ai/dsh-session').RequestContext | undefined
   }
 
   export interface Agent {
     readonly id: SessionId
     readonly status: 'idle' | 'running'
     readonly ctx: {
+      readonly compaction?: import('@deepseek-ai/dsh-compaction').CompactionEngine
       readonly tools: {
         schemas(agent: Agent): readonly { readonly name: string }[]
         register(definition: unknown): () => void
@@ -177,8 +185,32 @@ declare module '@deepseek-ai/dsh-agent' {
 
 declare module '@deepseek-ai/dsh-agent-presets' {}
 declare module '@deepseek-ai/dsh-api-session-controller' {}
+declare module '@deepseek-ai/dsh-compaction' {
+  import type { Agent } from '@deepseek-ai/dsh-agent'
+
+  export interface CompactionResult {
+    readonly compactionId: string
+  }
+
+  export abstract class CompactionEngine {
+    abstract compactNow(agent: Agent, signal: AbortSignal): Promise<CompactionResult | null>
+  }
+}
 declare module '@deepseek-ai/dsh-session-query' {}
 declare module '@deepseek-ai/dsh-system-prompt' {}
+
+declare module '@deepseek-ai/dsh-token-meter' {
+  import type { AgentSession } from '@deepseek-ai/dsh-agent'
+
+  export interface TokenMeasurement {
+    readonly totalTokens: number
+  }
+
+  export class TokenMeter {
+    measure(session: AgentSession): TokenMeasurement
+    estimateMessage(message: unknown): number
+  }
+}
 
 declare module '@deepseek-ai/dsh-tools' {
   import type { Agent } from '@deepseek-ai/dsh-agent'

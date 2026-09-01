@@ -10,10 +10,12 @@ import {
   sideChatSummarySchema,
   sideChatTreeItemSchema,
   usageReportSchema,
+  trajectoryDetailSchema,
   trajectoryItemsValueSchema,
   trajectoryOverviewSchema,
   type CreateSideChatRequest,
   type SideChatOutcome,
+  type TrajectoryChoice,
 } from '../types.ts'
 
 const createValue = createSideChatValueSchema
@@ -69,6 +71,14 @@ export class SideChatApi {
 
   trajectoryItems(sessionId: string, signal?: AbortSignal): Promise<Output<typeof trajectoryItemsValueSchema>> {
     return this.call('trajectoryItems', { sessionId }, trajectoryItemsValueSchema, signal)
+  }
+
+  trajectoryDetail(
+    sessionId: string,
+    ref: Pick<TrajectoryChoice, 'seq' | 'eventId' | 'kind' | 'digest'>,
+    signal?: AbortSignal,
+  ): Promise<Output<typeof trajectoryDetailSchema>> {
+    return this.call('trajectoryDetail', { sessionId, ref }, trajectoryDetailSchema, signal)
   }
 
   assistantMessages(sessionId: string, signal?: AbortSignal): Promise<Output<typeof assistantsValue>> {

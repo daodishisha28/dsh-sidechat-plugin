@@ -12,7 +12,7 @@ import {
 import { createPortal } from 'react-dom'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { TrajectoryChoice, TrajectoryOverview } from '../types.ts'
+import type { TrajectoryChoice, TrajectoryDetail, TrajectoryOverview } from '../types.ts'
 import type { CommonInjected } from './components.tsx'
 import { onTrajectoryPanelRequest, showCommandWorkflow } from './workflow-events.ts'
 
@@ -51,6 +51,7 @@ function kindClass(item: TrajectoryChoice): string {
 }
 
 function typeLabel(item: TrajectoryChoice): string {
+  if (item.kind === 'fold-note') return 'context'
   if (item.kind === 'request') return 'model'
   if (item.kind === 'tool-call') return item.parallelGroup === undefined ? 'call' : 'call ∥'
   if (item.kind === 'tool-result') return 'result'
@@ -63,7 +64,9 @@ function nodeKey(item: TrajectoryChoice): string {
 
 function details(item: TrajectoryChoice, all: readonly TrajectoryChoice[]): readonly [string, string][] {
   const belonging = item.turn === undefined ? 'Session' : `Turn ${item.turn} · 主 agent`
-  const projection: [string, string] = ['投影', `Host 投影 · ${item.redacted ? '已脱敏 ✓' : '无敏感字段'}`]
+  const projection: [string, string] = item.fullContentAvailable
+    ? ['内容', item.truncated ? '工具原文 · 列表预览已截断' : '工具原文 · 未脱敏']
+    : ['投影', `Host 投影 · ${item.redacted ? '已脱敏 ✓' : '无敏感字段'}`]
   if (item.kind === 'turn') {
     const members = all.filter(candidate => candidate.turn === item.turn && candidate.kind !== 'turn')
     const calls = members.filter(candidate => candidate.kind === 'tool-call' || candidate.kind === 'subagent')
@@ -85,17 +88,28 @@ function details(item: TrajectoryChoice, all: readonly TrajectoryChoice[]): read
 
 function layout(items: readonly TrajectoryChoice[], expandedTurns: ReadonlySet<number>, expandedAgents: ReadonlySet<string>): { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; height: number } {
   const turns = items.filter(item => item.kind === 'turn' && item.turn !== undefined)
+  const sessionNotes = items.filter(item => item.kind === 'fold-note' && item.turn === undefined)
+  const timeline = [...turns, ...sessionNotes].sort((left, right) => left.seq - right.seq || (left.kind === 'turn' ? -1 : 1))
   const nodes: LayoutNode[] = []
   const edges: LayoutEdge[] = []
   let x = 40
-  let previousTurn: string | undefined
-  for (const turnItem of turns) {
+  let previousTimelineNode: string | undefined
+  for (const timelineItem of timeline) {
+    if (timelineItem.kind === 'fold-note') {
+      const noteKey = nodeKey(timelineItem)
+      nodes.push({ item: timelineItem, x, y: 142 })
+      if (previousTimelineNode !== undefined) edges.push({ id: `${previousTimelineNode}-${noteKey}`, from: previousTimelineNode, to: noteKey, dashed: true })
+      previousTimelineNode = noteKey
+      x += 230
+      continue
+    }
+    const turnItem = timelineItem
     const turn = turnItem.turn!
     const turnId = nodeKey(turnItem)
     const events = items.filter(item => item.turn === turn && item.kind !== 'turn')
     nodes.push({ item: turnItem, x, y: 142 })
-    if (previousTurn !== undefined) edges.push({ id: `${previousTurn}-${turnId}`, from: previousTurn, to: turnId })
-    previousTurn = turnId
+    if (previousTimelineNode !== undefined) edges.push({ id: `${previousTimelineNode}-${turnId}`, from: previousTimelineNode, to: turnId })
+    previousTimelineNode = turnId
     if (!expandedTurns.has(turn)) { x += 184; continue }
     const users = events.filter(item => item.kind === 'user')
     const models = events.filter(item => item.kind === 'request')
@@ -200,6 +214,7 @@ export function TrajectoryPanel({ sessionId, api }: Props) {
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 })
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [focused, setFocused] = useState<TrajectoryChoice | null>(null)
+  const [focusedDetail, setFocusedDetail] = useState<{ key: string; value?: TrajectoryDetail; error?: string } | null>(null)
   const [expandedTurns, setExpandedTurns] = useState<Set<number>>(() => new Set())
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => new Set())
   const [flashing, setFlashing] = useState<string | null>(null)
@@ -248,6 +263,21 @@ export function TrajectoryPanel({ sessionId, api }: Props) {
   }, [api, sessionId])
 
   useEffect(() => reload(), [reload])
+  useEffect(() => {
+    if (focused === null || !focused.fullContentAvailable) return undefined
+    const abort = new AbortController()
+    const key = nodeKey(focused)
+    void api.trajectoryDetail(sessionId, {
+      seq: focused.seq,
+      eventId: focused.eventId,
+      kind: focused.kind,
+      digest: focused.digest,
+    }, abort.signal).then(
+      value => { if (!abort.signal.aborted) setFocusedDetail({ key, value }) },
+      reason => { if (!abort.signal.aborted) setFocusedDetail({ key, error: reason instanceof Error ? reason.message : String(reason) }) },
+    )
+    return () => { abort.abort() }
+  }, [api, focused, sessionId])
   useEffect(() => onTrajectoryPanelRequest(sessionId, () => { setOpen(true); reload() }), [reload, sessionId])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -312,6 +342,7 @@ export function TrajectoryPanel({ sessionId, api }: Props) {
     event.stopPropagation()
     if (event.ctrlKey) { toggleSelection(item, true); return }
     setFocused(item)
+    setFocusedDetail(item.fullContentAvailable ? { key: nodeKey(item) } : null)
   }
   const resizeStart = (event: ReactMouseEvent) => {
     event.preventDefault()
@@ -334,6 +365,9 @@ export function TrajectoryPanel({ sessionId, api }: Props) {
   const latestTurn = Math.max(0, ...items.flatMap(item => item.turn === undefined ? [] : [item.turn]))
   const hasGraph = graph.nodes.length > 0
   const hasOverview = overview !== null && (overview.turns > 0 || overview.calls > 0 || overview.subagents > 0 || overview.failures > 0)
+  const focusedContent = focused === null ? '' : focusedDetail?.key === nodeKey(focused) && focusedDetail.value !== undefined
+    ? focusedDetail.value.text
+    : focused.preview
   const triggerLabel = overview === null ? '轨迹速览 · 读取中…' : hasOverview ? `轨迹速览 · ${overview.turns} turns · ${overview.calls} calls · ${overview.subagents} subagent · ${overview.failures} 失败` : '轨迹速览 · 暂无数据'
   const toggleOpen = () => { if (!open) reload(); setOpen(value => !value) }
 
@@ -369,7 +403,7 @@ export function TrajectoryPanel({ sessionId, api }: Props) {
             <EdgeLayer edges={graph.edges} selected={selected} elements={elements} width={graph.width} height={graph.height} />
           </div><div className="dsh-trajectory-canvas-hint">拖动平移 · 滚轮缩放 · Ctrl+点击 = 直接选中</div></> : <div className="dsh-trajectory-empty">暂无轨迹事件 · 会话产生首个 turn 后此处自动生成轨迹图</div>}
         </div>
-        {focused !== null && <aside className="dsh-trajectory-detail"><header><span className={`kind-${focused.kind}`}>{typeLabel(focused)}</span><strong>{focused.label}</strong><button type="button" aria-label="关闭详情" onClick={() => { setFocused(null) }}>×</button></header><dl>{details(focused, items).map(([key, value]) => <div key={key}><dt>{key}</dt><dd className={key === '状态' && value === 'error' ? 'is-error' : ''}>{value}</dd></div>)}</dl><div className="dsh-trajectory-detail-body"><pre>{focused.preview}</pre></div><footer><button className="dsh-trajectory-secondary-button" type="button" onClick={() => { void navigator.clipboard?.writeText(focused.preview) }}>复制</button>{focused.selectable && <button className={selected.has(nodeKey(focused)) ? 'dsh-trajectory-selected-button' : 'dsh-trajectory-primary-button'} type="button" onClick={() => { toggleSelection(focused) }}>{selected.has(nodeKey(focused)) ? '✓ 已选择 · 点击取消' : '选择此项'}</button>}</footer></aside>}
+        {focused !== null && <aside className="dsh-trajectory-detail"><header><span className={`kind-${focused.kind}`}>{typeLabel(focused)}</span><strong>{focused.label}</strong><button type="button" aria-label="关闭详情" onClick={() => { setFocused(null); setFocusedDetail(null) }}>×</button></header><dl>{details(focused, items).map(([key, value]) => <div key={key}><dt>{key}</dt><dd className={key === '状态' && value === 'error' ? 'is-error' : ''}>{value}</dd></div>)}</dl>{focused.fullContentAvailable && <div className="dsh-trajectory-sensitive-notice">工具原文可能包含 API key、Cookie、环境变量或本机路径，请在加入 SideChat 前确认内容。</div>}<div className="dsh-trajectory-detail-body">{focusedDetail?.key === nodeKey(focused) && focusedDetail.error !== undefined && <div className="dsh-trajectory-detail-error" role="alert">完整内容加载失败：{focusedDetail.error}</div>}{focusedDetail?.key === nodeKey(focused) && focusedDetail.value === undefined && focusedDetail.error === undefined && <div className="dsh-trajectory-detail-loading">正在读取完整工具内容…</div>}<pre>{focusedContent}</pre></div><footer><button className="dsh-trajectory-secondary-button" type="button" onClick={() => { void navigator.clipboard?.writeText(focusedContent) }}>复制</button>{focused.selectable && <button className={selected.has(nodeKey(focused)) ? 'dsh-trajectory-selected-button' : 'dsh-trajectory-primary-button'} type="button" onClick={() => { toggleSelection(focused) }}>{selected.has(nodeKey(focused)) ? '✓ 已选择 · 点击取消' : '选择此项'}</button>}</footer></aside>}
       </div>}
       <div className="dsh-trajectory-selection-bar"><span>已选择 <b>{selectedItems.length} 项</b></span><span className={selectedTokens > 8_000 ? 'is-warning' : ''}>{selectedChars.toLocaleString()} chars · ≈{selectedTokens.toLocaleString()} token（预算 8k）{selectedTokens > 8_000 ? ' ⚠' : ''}</span><span className="spacer" /><span className="hint"><kbd>Ctrl</kbd>+点击 快速增删选择</span><button className="dsh-trajectory-secondary-button" type="button" disabled={selectedItems.length === 0} onClick={() => { setSelected(new Set()) }}>清除</button><button className="dsh-trajectory-primary-button" type="button" disabled={selectedItems.length === 0} onClick={ask}>基于所选轨迹提问 →</button></div>
       <div className="dsh-trajectory-resizer" role="separator" aria-orientation="horizontal" onMouseDown={resizeStart} />

@@ -112,7 +112,7 @@ export function apply(ctx: Context): void {
     available: () => true,
     ui: {
       kind: 'popupSelect',
-      options: async () => [{ id: 'open', label: '打开轨迹分析', detail: '选择 Host 脱敏后的轨迹事件并发起 SideChat' }],
+      options: async () => [{ id: 'open', label: '打开轨迹分析', detail: '选择 Host 校验后的轨迹事件并发起 SideChat；工具内容按原文读取' }],
       onSelect: (_option, session) => {
         if (!showTrajectoryPanel(session.sessionId)) throw new Error('轨迹界面尚未就绪，请保持当前 Session 页面打开后重试')
       },

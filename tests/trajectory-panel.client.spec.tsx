@@ -13,11 +13,11 @@ afterEach(() => {
 })
 
 const items: TrajectoryChoice[] = [
-  { sourceSessionId: 'parent', seq: 1, eventId: 'turn:1', turn: 1, kind: 'turn', label: 'Turn 1', preview: '[user] inspect', chars: 14, estimatedTokens: 4, redacted: false, selectable: true, digest: 'turn-digest', status: 'success', durationMs: 71_370_600 },
-  { sourceSessionId: 'parent', seq: 2, eventId: 'u1', turn: 1, kind: 'user', label: 'inspect login', preview: 'inspect login', chars: 13, estimatedTokens: 4, redacted: false, selectable: true, digest: 'user-digest', status: 'success' },
-  { sourceSessionId: 'parent', seq: 3, eventId: 'm1', turn: 1, kind: 'request', label: 'deepseek/chat', preview: 'route', chars: 5, estimatedTokens: 2, redacted: false, selectable: true, digest: 'model-digest', status: 'success' },
-  { sourceSessionId: 'parent', seq: 4, eventId: 'c1', turn: 1, kind: 'tool-call', label: 'read', preview: '{"path":"src/login.ts"}', chars: 23, estimatedTokens: 6, redacted: false, selectable: true, digest: 'call-digest', status: 'success', toolName: 'read', parallelGroup: 'p1' },
-  { sourceSessionId: 'parent', seq: 5, eventId: 'a1', turn: 1, kind: 'assistant', label: 'assistant ✓', preview: 'done', chars: 4, estimatedTokens: 1, redacted: false, selectable: true, digest: 'final-digest', status: 'success' },
+  { sourceSessionId: 'parent', seq: 1, eventId: 'turn:1', turn: 1, kind: 'turn', label: 'Turn 1', preview: '[user] inspect', chars: 14, estimatedTokens: 4, redacted: false, truncated: false, fullContentAvailable: false, selectable: true, digest: 'turn-digest', status: 'success', durationMs: 71_370_600 },
+  { sourceSessionId: 'parent', seq: 2, eventId: 'u1', turn: 1, kind: 'user', label: 'inspect login', preview: 'inspect login', chars: 13, estimatedTokens: 4, redacted: false, truncated: false, fullContentAvailable: false, selectable: true, digest: 'user-digest', status: 'success' },
+  { sourceSessionId: 'parent', seq: 3, eventId: 'm1', turn: 1, kind: 'request', label: 'deepseek/chat', preview: 'route', chars: 5, estimatedTokens: 2, redacted: false, truncated: false, fullContentAvailable: false, selectable: true, digest: 'model-digest', status: 'success' },
+  { sourceSessionId: 'parent', seq: 4, eventId: 'c1', turn: 1, kind: 'tool-call', label: 'read', preview: '{"path":"src/login.ts"}', chars: 23, estimatedTokens: 6, redacted: false, truncated: false, fullContentAvailable: true, selectable: true, digest: 'call-digest', status: 'success', toolName: 'read', parallelGroup: 'p1' },
+  { sourceSessionId: 'parent', seq: 5, eventId: 'a1', turn: 1, kind: 'assistant', label: 'assistant ✓', preview: 'done', chars: 4, estimatedTokens: 1, redacted: false, truncated: false, fullContentAvailable: false, selectable: true, digest: 'final-digest', status: 'success' },
 ]
 
 function renderInConversation(api: unknown) {
@@ -38,7 +38,7 @@ describe('trajectory panel interactions', () => {
     const create = vi.fn(async () => ({ childSessionId: 'child', record: {} }))
     const api = {
       trajectoryOverview: vi.fn(async () => ({ turns: 1, calls: 1, subagents: 0, failures: 0, durationMs: 100, capturedThroughSeq: 5 })),
-      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v1' })),
+      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v2' })),
       create,
     }
     renderInConversation(api)
@@ -71,11 +71,30 @@ describe('trajectory panel interactions', () => {
     })))
   })
 
+  it('loads unredacted full tool content separately from the bounded preview', async () => {
+    const api = {
+      trajectoryOverview: vi.fn(async () => ({ turns: 1, calls: 1, subagents: 0, failures: 0, durationMs: 100, capturedThroughSeq: 5 })),
+      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v2' })),
+      trajectoryDetail: vi.fn(async () => ({
+        seq: 4, eventId: 'c1', kind: 'tool-call', digest: 'call-digest',
+        text: '{"path":"C:\\\\Users\\\\zzc\\\\secret.txt","apiKey":"sk-visible"}',
+        chars: 62, estimatedTokens: 16, redacted: false,
+      })),
+    }
+    renderInConversation(api)
+    fireEvent.click(await screen.findByRole('button', { name: /轨迹速览 · 1 turns/u }))
+    fireEvent.doubleClick(await screen.findByText('Turn 1'))
+    fireEvent.click(await screen.findByText('read'))
+    expect(await screen.findByText(/sk-visible/u)).toBeTruthy()
+    expect(screen.getByText('工具原文可能包含 API key、Cookie、环境变量或本机路径，请在加入 SideChat 前确认内容。')).toBeTruthy()
+    expect(api.trajectoryDetail).toHaveBeenCalledWith('parent', expect.objectContaining({ eventId: 'c1', digest: 'call-digest' }), expect.any(AbortSignal))
+  })
+
   it('keeps trigger and overlay out of flow and supports every close path', async () => {
     const dispose = installStyles()
     const api = {
       trajectoryOverview: vi.fn(async () => ({ turns: 1, calls: 1, subagents: 0, failures: 0, durationMs: 100, capturedThroughSeq: 5 })),
-      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v1' })),
+      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v2' })),
     }
     renderInConversation(api)
     const trigger = await screen.findByRole('button', { name: /轨迹速览 · 1 turns/u })
@@ -109,7 +128,7 @@ describe('trajectory panel interactions', () => {
     installStyles()
     const api = {
       trajectoryOverview: vi.fn(async () => ({ turns: 1, calls: 1, subagents: 0, failures: 0, durationMs: 100, capturedThroughSeq: 5 })),
-      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v1' })),
+      trajectoryItems: vi.fn(async () => ({ items, capturedThroughSeq: 5, projectionVersion: 'trajectory-v2' })),
     }
     renderInConversation(api)
     fireEvent.click(await screen.findByRole('button', { name: /轨迹速览 · 1 turns/u }))
@@ -141,13 +160,13 @@ describe('trajectory panel interactions', () => {
   it('keeps all adjacent edges in the node transform through nested expansion, zoom and pan', async () => {
     const nestedItems: TrajectoryChoice[] = [
       ...items.slice(0, 3),
-      { sourceSessionId: 'parent', seq: 4, eventId: 'sa1', turn: 1, kind: 'subagent', label: 'Task: search agent', preview: 'search', chars: 6, estimatedTokens: 2, redacted: false, selectable: true, digest: 'subagent-digest', status: 'success', childTurns: 2, toolName: 'Task' },
+      { sourceSessionId: 'parent', seq: 4, eventId: 'sa1', turn: 1, kind: 'subagent', label: 'Task: search agent', preview: 'search', chars: 6, estimatedTokens: 2, redacted: false, truncated: false, fullContentAvailable: true, selectable: true, digest: 'subagent-digest', status: 'success', childTurns: 2, toolName: 'Task' },
       { ...items[4]!, seq: 5 },
-      { sourceSessionId: 'parent', seq: 6, eventId: 'turn:2', turn: 2, kind: 'turn', label: 'Turn 2', preview: 'next', chars: 4, estimatedTokens: 1, redacted: false, selectable: true, digest: 'turn-2-digest', status: 'success', durationMs: 2_000 },
+      { sourceSessionId: 'parent', seq: 6, eventId: 'turn:2', turn: 2, kind: 'turn', label: 'Turn 2', preview: 'next', chars: 4, estimatedTokens: 1, redacted: false, truncated: false, fullContentAvailable: false, selectable: true, digest: 'turn-2-digest', status: 'success', durationMs: 2_000 },
     ]
     const api = {
       trajectoryOverview: vi.fn(async () => ({ turns: 2, calls: 1, subagents: 1, failures: 0, durationMs: 71_372_600, capturedThroughSeq: 6 })),
-      trajectoryItems: vi.fn(async () => ({ items: nestedItems, capturedThroughSeq: 6, projectionVersion: 'trajectory-v1' })),
+      trajectoryItems: vi.fn(async () => ({ items: nestedItems, capturedThroughSeq: 6, projectionVersion: 'trajectory-v2' })),
     }
     renderInConversation(api)
     fireEvent.click(await screen.findByRole('button', { name: /轨迹速览 · 2 turns/u }))
@@ -178,10 +197,36 @@ describe('trajectory panel interactions', () => {
     expect(panel.querySelectorAll('.dsh-trajectory-edges path')).toHaveLength(7)
   })
 
+  it('renders SideChat context appended outside any turn in sequence order', async () => {
+    const contextItems: TrajectoryChoice[] = [
+      ...items,
+      { sourceSessionId: 'parent', seq: 6, eventId: 'fold-1', kind: 'fold-note', label: '↩ SideChat Fold', preview: '[SideChat fold id=f1 rev=1 source=child]\nFold result', chars: 55, estimatedTokens: 14, redacted: false, truncated: false, fullContentAvailable: false, selectable: false, digest: 'fold-digest', status: 'success' },
+      { sourceSessionId: 'parent', seq: 7, eventId: 'cite-1', kind: 'fold-note', label: '↩ SideChat Cite', preview: '[SideChat cite id=c1 source=child message=m1]\nCited reply', chars: 58, estimatedTokens: 15, redacted: false, truncated: false, fullContentAvailable: false, selectable: false, digest: 'cite-digest', status: 'success' },
+      { sourceSessionId: 'parent', seq: 8, eventId: 'withdrawal-1', kind: 'fold-note', label: '↩ SideChat Fold 撤回', preview: '[SideChat fold-withdrawal id=f1 rev=1 source=child]\nWithdrawn', chars: 64, estimatedTokens: 16, redacted: false, truncated: false, fullContentAvailable: false, selectable: false, digest: 'withdrawal-digest', status: 'success' },
+      { sourceSessionId: 'parent', seq: 9, eventId: 'turn:2', turn: 2, kind: 'turn', label: 'Turn 2', preview: '[user] continue', chars: 15, estimatedTokens: 4, redacted: false, truncated: false, fullContentAvailable: false, selectable: true, digest: 'turn-2-digest', status: 'success', durationMs: 10 },
+    ]
+    const api = {
+      trajectoryOverview: vi.fn(async () => ({ turns: 2, calls: 1, subagents: 0, failures: 0, durationMs: 130, capturedThroughSeq: 9 })),
+      trajectoryItems: vi.fn(async () => ({ items: contextItems, capturedThroughSeq: 9, projectionVersion: 'trajectory-v2' })),
+    }
+    renderInConversation(api)
+    fireEvent.click(await screen.findByRole('button', { name: /轨迹速览 · 2 turns/u }))
+    const panel = screen.getByLabelText('轨迹速览面板')
+    expect(within(panel).getByText('↩ SideChat Fold')).toBeTruthy()
+    expect(within(panel).getByText('↩ SideChat Cite')).toBeTruthy()
+    expect(within(panel).getByText('↩ SideChat Fold 撤回')).toBeTruthy()
+    expect([...panel.querySelectorAll('.dsh-trajectory-node-name')].map(node => node.textContent)).toEqual([
+      'Turn 1▸', '↩ SideChat Fold', '↩ SideChat Cite', '↩ SideChat Fold 撤回', 'Turn 2▸',
+    ])
+    fireEvent.click(within(panel).getByText('↩ SideChat Cite'))
+    expect(await within(panel).findByText(/Cited reply/u)).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: '选择此项' })).toBeNull()
+  })
+
   it('renders the persistent empty state with disabled actions', async () => {
     const api = {
       trajectoryOverview: vi.fn(async () => ({ turns: 0, calls: 0, subagents: 0, failures: 0, durationMs: 0, capturedThroughSeq: 0 })),
-      trajectoryItems: vi.fn(async () => ({ items: [], capturedThroughSeq: 0, projectionVersion: 'trajectory-v1' })),
+      trajectoryItems: vi.fn(async () => ({ items: [], capturedThroughSeq: 0, projectionVersion: 'trajectory-v2' })),
     }
     renderInConversation(api)
     fireEvent.click(await screen.findByRole('button', { name: '轨迹速览 · 暂无数据' }))

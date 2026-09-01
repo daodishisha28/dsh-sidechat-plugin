@@ -46,7 +46,7 @@ Fold 追加到 A 的最新消息之后
 - 不通过 DOM 查询或复制 DSH 私有组件实现；
 - 不把轨迹事件写成未知的 `trajectory/*` Session event；
 - 不把整份父 transcript 自动复制到 B；
-- 不默认暴露原始 reasoning、凭据、环境变量或未脱敏工具参数；
+- 不暴露原始 reasoning；工具调用与工具结果是用户显式选择和继续提问的依据，按原文提供，并在 UI 明示可能包含凭据、环境变量和本机路径；
 - 不因为用户选择了轨迹内容而增加 B 的工具权限；
 - 不把 Fold 插入原始轨迹节点旁边；Fold 始终追加到 A 当时可用的最新消息之后；
 - 第一版不实现跨工作区轨迹引用、多人协作或知识图谱。
@@ -144,7 +144,7 @@ Turn 12 · 运行 18.4s · 2 tools · 失败 0
 [清除选择] [基于所选轨迹提问]
 ```
 
-详情面板显示 Host 已脱敏的文本、事件 seq、类型、工具名、turn/step 和来源 Session。不能显示一份未经过 Host 投影的原始 event object。
+详情面板显示事件 seq、类型、工具名、turn/step 和来源 Session。普通消息、reasoning 与错误继续使用 Host 安全投影；工具调用和工具结果通过精确 ref 详情接口读取原文内容，但不返回任意原始 event object。
 
 移动端采用“事件列表 -> 详情底部抽屉”的单列模式，选择栏固定在底部，避免桌面端双栏在窄屏重叠。
 
@@ -153,7 +153,7 @@ Turn 12 · 运行 18.4s · 2 tools · 失败 0
 点击“基于所选轨迹提问”后，打开现有 DSH 内嵌 SideChat workflow 的轨迹模式：
 
 1. 显示来源 A 和选中的事件数量；
-2. 显示事件摘要、脱敏标识和字符/token 预算；
+2. 显示事件摘要、`truncated`/`redacted` 的独立标识和字符/token 预算；
 3. 输入必填问题；
 4. 权限默认只读，可明确选择继承；
 5. 模型沿用现有父会话最近 route 规则；
@@ -177,16 +177,17 @@ Turn 12 · 运行 18.4s · 2 tools · 失败 0
 | Turn start/end | turn 编号、时间、状态和持续时间 |
 | Model request | provider/model/reasoning effort 等非敏感 route 摘要 |
 | Assistant final | assistant 最终文本 |
-| Tool call | 工具名、call ID、脱敏后的有限参数摘要 |
-| Tool result | 成功/失败状态、工具名、脱敏后的有限结果摘要 |
+| Tool call | 工具名、call ID、有界原文预览；详情按精确 ref 读取完整原文 |
+| Tool result | 成功/失败状态、工具名、有界原文预览；详情按精确 ref 读取完整原文 |
 | Error | 错误类型、状态和脱敏错误文本 |
 
 ### 5.2 默认限制
 
 - 原始 reasoning 默认不可选择；后续可提供脱敏摘要选项；
-- Authorization、API key、cookie、环境变量和 secret 字段必须删除或替换；
-- 工具参数和结果使用字段 allowlist，不做整对象 JSON 转发；
-- 文件路径按产品需要保留工作区相对路径，绝对路径按策略脱敏；
+- 工具调用与工具结果不删除未知字段，不替换 Authorization、API key、cookie、环境变量、secret 或绝对路径；
+- 列表预览保持技术限流，截断必须标记为 `truncated`，不能借用 `redacted` 表达；
+- 完整工具内容只允许通过当前 Session 中可见事件的精确 `seq + eventId + kind + digest` 读取，不能请求任意日志 dump；
+- UI 必须提示工具原文可能包含敏感信息，用户应在加入 SideChat 前确认；
 - plugin 注入消息默认不作为轨迹背景选择，防止递归注入 SideChat 指令；
 - 每个事件和整个选择集合都有字符/token 上限；超过上限时要求用户减少选择，不静默截断关键内容；
 - 所有被选文本在 B 中标识为背景数据，不提供工具授权。
@@ -211,12 +212,14 @@ type TrajectoryChoice = {
   preview: string
   chars: number
   redacted: boolean
+  truncated: boolean
+  fullContentAvailable: boolean
   selectable: boolean
   digest: string
 }
 ```
 
-`preview` 只用于列表展示。创建时 Host 必须根据 `sourceSessionId + seq/eventId + digest` 重新读取并生成最终快照，不能信任浏览器传回的文本。
+`preview` 只用于有界列表展示。`chars` 和 token 估算按最终可选内容计算。创建时 Host 必须根据 `sourceSessionId + seq/eventId + kind + digest` 重新读取并生成最终快照，不能信任浏览器传回的文本。工具快照使用完整原文而不是截断预览。
 
 ### 6.2 轨迹快照 provenance
 
@@ -248,10 +251,10 @@ type TrajectorySeed = {
 - 来源 Session 和 lifecycle identity；
 - 原始 event seq/event ID；
 - 事件类型、turn、step；
-- Host 脱敏后的不可变文本；
+- Host 重新校验后的不可变文本；工具调用/结果为原文，其他事件维持既有安全投影；
 - digest、投影版本和捕获时间；
 - 被选数量、字符数和 token 估算；
-- 是否存在脱敏或字段裁剪。
+- 是否存在脱敏；列表预览截断与快照内容必须分开表达。
 
 不把完整原始事件写入 SideChat domain。B transcript 只写一个已知的 plugin-source `user/message`，其中包含轨迹快照和问题。
 
@@ -266,6 +269,7 @@ type TrajectorySeed = {
 ```text
 trajectoryOverview(sessionId, filters)
 trajectoryItems(sessionId, cursor, filters)
+trajectoryDetail(sessionId, ref)
 ```
 
 `trajectoryOverview` 返回：
@@ -277,7 +281,7 @@ trajectoryItems(sessionId, cursor, filters)
 - 可用 usage；
 - 已关联 SideChat 数量。
 
-`trajectoryItems` 返回有界 `TrajectoryChoice[]`、分页 cursor 和当前 capture snapshot 信息。浏览器不能请求任意原始日志 dump。
+`trajectoryItems` 返回有界 `TrajectoryChoice[]`、分页 cursor 和当前 capture snapshot 信息。`trajectoryDetail` 只接受列表返回的精确 ref，并在当前 surface 上重新校验 digest 后返回完整工具调用/结果；浏览器不能请求任意原始日志 dump。
 
 ### 7.2 创建 SideChat
 
@@ -329,7 +333,7 @@ Host 重新读取 A 完整日志
   ↓
 校验 identity、seq、eventId、digest 和预算
   ↓
-生成脱敏不可变 snapshots
+生成经 Host 校验的不可变 snapshots（工具节点使用原文）
   ↓
 创建普通 B
   ↓
@@ -397,14 +401,17 @@ Fold **不插入**被选中的原轨迹节点旁边，也不回写历史中的�
 - A 空闲时，追加到提交时 Session log 的最后一个可用位置；
 - A 正在运行时，先保持 pending；
 - 当前 turn 结束并进入安全边界后，追加到当时的最新位置；
-- 不启动 A 新 turn，不调用 A 模型，不 followup，不 steer，不 inject。
+- 不启动 A 新 turn，不 followup，不 steer，不 inject；
+- 预测完整追加后达到 `foldAppendThresholdRatio` 时，退出当前 maintenance，先显式压缩 A 的旧历史，再进入新的安全边界重新测量；
+- 压缩后低于阈值才完整追加 Fold。无可压缩范围、压缩失败或仍超阈值时不截断、不追加，并记录明确失败；
+- Fold append 本身不调用 A 的普通回复模型，但显式历史压缩通常会产生一次独立的压缩模型调用。
 
 ### 10.2 轨迹中的 Fold 展示
 
 由于 Fold 是已知的 plugin-source `user/message`，它会在 A 的普通 transcript 和后续轨迹中出现。轨迹视图应将其显示为特殊注释，而不是模型步骤：
 
 ```text
-SideChat Fold · rev-1 · zero model calls
+SideChat Fold · rev-1 · no-reply append（压力压缩调用另计）
 来源轨迹：turn 12 / step 4，共 4 项
 ```
 
@@ -434,12 +441,12 @@ Fold 已确认，等待父会话当前回复结束后追加到最新位置。
 
 - Host 是轨迹投影和授权的唯一事实源；Client 只提交 ref，不提交可信文本；
 - 选择的轨迹、Seed、Cite 和 Recall 统一标记为不可信背景；
-- 工具参数、结果和错误文本经过字段 allowlist 与敏感信息脱敏；
+- 工具参数和结果按原文读取以支持继续提问，错误与普通事件仍使用既有安全投影；
 - 轨迹背景不改变 B 的 tools、sandbox 或 approval；
 - B 中的轨迹内容不能授权 B 执行新的工具操作；
 - source Session、workspace 和 lifecycle identity 必须每次 Host 操作重新验证；
 - 只允许当前 Session 的轨迹创建直接 SideChat；跨父/跨工作区能力另行设计，默认关闭；
-- 日志、错误和 usage 中不得记录未脱敏凭据；
+- 插件自身日志和错误不得复制工具原文或未脱敏凭据；工具原文只进入授权详情响应及用户确认的轨迹快照；
 - 用户取消选择或取消创建时，不产生 B、不增长 A、不产生模型调用。
 
 ---
@@ -476,7 +483,7 @@ Fold 已确认，等待父会话当前回复结束后追加到最新位置。
 
 ### T1：Host 轨迹投影
 
-实现事件 allowlist、脱敏、分页、digest、预算、identity 校验和 stale 检查。增加独立 schema 和真实 Session log fixture。
+实现事件 allowlist、工具原文详情、普通事件安全投影、分页、digest、预算、identity 校验和 stale 检查。增加独立 schema 和真实 Session log fixture。
 
 ### T2：轨迹 Seed 与创建流程
 
@@ -502,7 +509,7 @@ Fold 已确认，等待父会话当前回复结束后追加到最新位置。
 
 1. 轨迹总览可以按 turn/step 展示完整执行关系，不要求逐个打开节点才能比较。
 2. 用户可以选择多个事件并看到选择数量、字符数和 token 预算。
-3. 选择内容经过 Host 投影和脱敏，原始 event object 不直接返回给 Client。
+3. 选择内容经过 Host 校验；工具调用/结果返回内容原文但不返回任意原始 event object，其他事件维持安全投影。
 4. 选择轨迹后可以创建普通 B，B 不包含 A 的完整 transcript。
 5. B provenance 保存 source Session、identity、seq/event ID、digest、投影版本和不可变快照。
 6. A 新增不相关轨迹事件不会使选择失效；被选事件变化时创建 fail closed。
@@ -518,7 +525,7 @@ Fold 已确认，等待父会话当前回复结束后追加到最新位置。
 
 ### 安全与兼容
 
-1. 未脱敏凭据、环境变量和工具敏感字段不能进入 B。
+1. 工具原文只有在用户选择对应节点时才能进入 B，并在 UI 明示可能包含凭据、环境变量和本机路径；未选择的原始日志不能读取或进入 B。
 2. 轨迹文本中的指令不能改变 B 的权限或触发工具授权。
 3. 插件卸载后 B 和已提交 Fold 仍可作为普通 Session 读取。
 4. 不新增未知 Session event type，不影响 native subagent 和原生轨迹页面。
