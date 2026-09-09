@@ -17,6 +17,7 @@ const facade = await readFile(resolve(root, 'types/dsh-compat.d.ts'), 'utf8')
 const facadeAnchors = [
   "declare module '@deepseek-ai/cordis'",
   "declare module '@deepseek-ai/dsh-agent'",
+  "declare module '@deepseek-ai/dsh-agent-default-model'",
   "declare module '@deepseek-ai/dsh-client-connection'",
   "declare module '@deepseek-ai/dsh-client-ui-slots'",
   "declare module '@deepseek-ai/dsh-compaction'",
@@ -50,6 +51,7 @@ const expected = [
   ['packages/session-query/session-query/src/index.ts', 'async readSurface(sessionId: SessionId)'],
   ['packages/session-query/session-query/src/index.ts', 'async readSession(sessionId: SessionId): Promise<SessionLogSnapshot>'],
   ['packages/core/agent/src/runtime-types.ts', 'runMaintenance<T>'],
+  ['packages/core/agent-default-model/src/index.ts', 'currentSelection(): ModelSelection'],
   ['packages/core/session/src/index.ts', 'requestContext(): RequestContext | undefined'],
   ['packages/compaction/compaction/src/index.ts', 'abstract compactNow('],
   ['packages/llm/token-meter/src/index.ts', 'measure(session: Session, requestHeader?: EpochHeader): TokenMeasurement'],
@@ -63,6 +65,7 @@ const expected = [
   ['packages/interaction/user-approval/src/index.ts', 'export function setApprovalPolicy(session: Session, policy: ApprovalPolicy): void'],
   ['packages/storage/storage-domain/src/domain.ts', 'update(key: K, fn: (current: V) => V): Promise<V>'],
   ['packages/llm/llm/src/index.ts', 'stream(options: GenerateOptions): AsyncIterable<StreamChunk>'],
+  ['packages/llm/llm/src/index.ts', 'async resolveModelInfo('],
   ['packages/llm/llm/src/types.ts', 'tools?: ToolSchema[]'],
   ['packages/llm/token-meter/src/client.ts', 'export { deriveTurnTokenUsage }'],
   ['packages/client/ui-conversation/src/client/contract/slots.ts', "'conversation.view'"],

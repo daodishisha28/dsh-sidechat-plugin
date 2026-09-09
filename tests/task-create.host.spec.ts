@@ -3,6 +3,7 @@ import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
 import { SideChatService } from '../src/service.ts'
 import type { SideChatRecord } from '../src/types.ts'
+import { projectTrajectory } from '../src/trajectory.ts'
 
 class MemoryTable {
   readonly rows = new Map<string, SideChatRecord>()
@@ -30,10 +31,13 @@ function header(id: string, createdAt: number): SessionHeader {
 interface HarnessOptions {
   readonly stream: (request: unknown) => AsyncIterable<unknown>
   readonly parentCreatedAt?: readonly number[]
+  readonly parentEvents?: SessionEvent[]
+  readonly surfaceEvents?: SessionEvent[]
+  readonly contextWindow?: number
 }
 
 function makeHarness(options: HarnessOptions) {
-  const parentEvents = [
+  const parentEvents = options.parentEvents ?? [
     event(1, 'user/message', {
       id: 'u1', source: { kind: 'user' }, content: [{ type: 'text', text: 'Redis is used by the cache layer.' }],
     }),
@@ -41,6 +45,7 @@ function makeHarness(options: HarnessOptions) {
       header: { config: { provider: 'parent-provider', model: 'parent-model', reasoningEffort: 'low' } },
     }),
   ]
+  const surfaceEvents = options.surfaceEvents ?? parentEvents
   const childEvents: SessionEvent[] = []
   const createdAt = [...options.parentCreatedAt ?? [1, 1]]
   let parentInspections = 0
@@ -87,10 +92,13 @@ function makeHarness(options: HarnessOptions) {
     rename: vi.fn(async () => undefined),
   }
   const requests: unknown[] = []
+  const readSurface = vi.fn(async () => ({ events: surfaceEvents, capturedThroughSeq: surfaceEvents.at(-1)?.seq ?? 0 }))
+  const readSession = vi.fn(async () => ({ session: header('parent', 1), events: parentEvents }))
   const ctx = new Context()
   ctx.provide('sessionController', sessionController)
   ctx.provide('sessionQuery', {
-    readSurface: vi.fn(async () => ({ events: parentEvents, capturedThroughSeq: 2 })),
+    readSurface,
+    readSession,
   })
   ctx.provide('agents', { get: vi.fn(() => undefined), list: vi.fn(() => []) })
   ctx.provide('agentPresets', {
@@ -98,13 +106,17 @@ function makeHarness(options: HarnessOptions) {
   })
   ctx.provide('sandboxPolicy', { resolve: vi.fn(() => ({ mode: 'workspace-write', workspaceRoot: 'C:\\work' })) })
   ctx.provide('approval', { overrideOf: vi.fn(() => 'ask'), config: { policy: 'ask' } })
+  ctx.provide('agentDefaultModel', { currentSelection: vi.fn(() => ({ provider: 'child-provider', model: 'child-model' })) })
   ctx.provide('llm', {
     stream: vi.fn((request: unknown) => { requests.push(request); return options.stream(request) }),
+    resolveModelInfo: vi.fn(async () => options.contextWindow === undefined
+      ? { provider: 'child-provider', id: 'child-model' }
+      : { provider: 'child-provider', id: 'child-model', context: { contextWindow: options.contextWindow } }),
   })
   const table = new MemoryTable()
   const service = new SideChatService(ctx, { seedTaskMaxTokens: 500 })
   Object.defineProperty(service, 'table', { value: table, writable: true })
-  return { service, table, requests, parentEvents, createSession, childAgent, childRestrict }
+  return { service, table, requests, parentEvents, createSession, childAgent, childRestrict, readSurface, readSession }
 }
 
 function taskRequest() {
@@ -207,5 +219,99 @@ describe('Task Seed create Host integration', () => {
     await expect(harness.service.create(taskRequest())).resolves.toMatchObject({ ok: false })
     expect(harness.createSession).not.toHaveBeenCalled()
     expect(harness.table.rows.size).toBe(0)
+  })
+})
+
+describe('trajectory Seed create budget', () => {
+  function trajectoryHarness(textLength: number, contextWindow?: number) {
+    const marker = '[SideChat fold id=fold-1 rev=1 source=source-child]'
+    const parentEvents = [event(1, 'user/message', {
+      id: 'fold-message',
+      source: { kind: 'plugin' },
+      content: [{ type: 'text', text: `${marker}\n${'x'.repeat(textLength)}` }],
+    })]
+    const harness = makeHarness({ stream: async function* () {}, parentEvents, contextWindow })
+    const fold = projectTrajectory('parent', parentEvents)[0]!
+    const request = {
+      parentSessionId: 'parent',
+      question: '继续分析这个 Fold 结论',
+      seedMode: 'trajectory',
+      modelStrategy: { kind: 'default' },
+      trajectorySelection: {
+        sourceSessionId: 'parent',
+        capturedThroughSeq: 1,
+        refs: [{ seq: fold.seq, eventId: fold.eventId, kind: fold.kind, digest: fold.digest }],
+      },
+    } as const
+    return { ...harness, marker, request }
+  }
+
+  it('uses 30% of a known target context window before creating B', async () => {
+    const harness = trajectoryHarness(124_000, 100_000)
+    await expect(harness.service.create(harness.request)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'create-failed', message: expect.stringMatching(/30%.*allows 30,000 tokens/u) },
+    })
+    expect(harness.createSession).not.toHaveBeenCalled()
+    expect(harness.table.rows.size).toBe(0)
+  })
+
+  it('falls back to 48k and preserves the Fold source marker in the immutable Seed', async () => {
+    const harness = trajectoryHarness(180_000)
+    await expect(harness.service.create(harness.request)).resolves.toMatchObject({ ok: true })
+    expect(harness.createSession).toHaveBeenCalledOnce()
+    expect(harness.table.get('child')?.seed.trajectory?.snapshots[0]?.text).toContain(harness.marker)
+    expect(harness.childAgent.followup).toHaveBeenCalledWith(expect.objectContaining({
+      content: [expect.objectContaining({ text: expect.stringContaining(harness.marker) })],
+    }))
+  })
+
+  it('uses one complete raw-log observation for trajectory endpoints and creation', async () => {
+    const parentEvents: SessionEvent[] = [
+      event(1, 'turn/start', { turn: 1 }),
+      event(2, 'step/start', { turn: 1, step: 1 }),
+      event(3, 'request/header', { reason: 'initial', header: { config: { provider: 'p', model: 'm' } } }),
+      event(4, 'assistant/message', { turn: 1, step: 1, message: { id: 'answer', source: { kind: 'model', provider: 'p', model: 'm' }, content: [{ type: 'tool-call', id: 'call-1', name: 'read', arguments: '{"path":"a.ts"}' }] } }),
+      event(5, 'tool/call', { turn: 1, step: 1, callId: 'call-1', name: 'read', arguments: '{"path":"a.ts"}' }),
+      event(6, 'tool/result', { turn: 1, step: 1, message: { id: 'result-1', source: { kind: 'tool', callId: 'call-1' }, content: [{ type: 'tool-result', toolCallId: 'call-1', content: [{ type: 'text', text: 'ok' }] }] } }),
+      event(7, 'step/end', { turn: 1, step: 1 }),
+      event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+    ]
+    const harness = makeHarness({
+      stream: async function* () {},
+      parentEvents,
+      // This is the shape old code received from readSurface: execution
+      // lifecycle and log-only call events are intentionally absent.
+      surfaceEvents: [parentEvents[3]!],
+    })
+    const itemsResult = await harness.service.trajectoryItems({ sessionId: 'parent' })
+    const overviewResult = await harness.service.trajectoryOverview({ sessionId: 'parent' })
+    expect(itemsResult).toMatchObject({ ok: true, value: { capturedThroughSeq: 8 } })
+    expect(overviewResult).toMatchObject({ ok: true, value: { turns: 1, calls: 1 } })
+    const items = itemsResult.ok ? (itemsResult.value as { items: ReturnType<typeof projectTrajectory> }).items : []
+    const call = items.find(item => item.kind === 'tool-call')!
+    const detailResult = await harness.service.trajectoryDetail({
+      sessionId: 'parent',
+      ref: { seq: call.seq, eventId: call.eventId, kind: call.kind, digest: call.digest },
+    })
+    expect(detailResult).toMatchObject({ ok: true, value: { text: '{"path":"a.ts"}' } })
+
+    const createResult = await harness.service.create({
+      parentSessionId: 'parent',
+      question: 'Explain this read result',
+      seedMode: 'trajectory',
+      modelStrategy: { kind: 'default' },
+      trajectorySelection: {
+        sourceSessionId: 'parent',
+        capturedThroughSeq: 8,
+        refs: [{ seq: call.seq, eventId: call.eventId, kind: call.kind, digest: call.digest }],
+      },
+    })
+    expect(createResult).toMatchObject({ ok: true })
+    expect(harness.table.get('child')?.seed.trajectory?.snapshots).toEqual([
+      expect.objectContaining({ eventId: 'call-1', kind: 'tool-call', text: '{"path":"a.ts"}' }),
+    ])
+    expect(harness.readSurface).not.toHaveBeenCalled()
+    expect(harness.readSession).toHaveBeenCalledTimes(4)
   })
 })

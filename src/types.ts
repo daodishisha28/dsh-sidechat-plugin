@@ -91,6 +91,17 @@ export const sessionUsageSchema = z.object({
 })
 export type SessionUsage = z.infer<typeof sessionUsageSchema>
 
+export const DEFAULT_TRAJECTORY_CONTEXT_WINDOW_RATIO = 0.3
+export const DEFAULT_TRAJECTORY_FALLBACK_MAX_TOKENS = 48_000
+export const DEFAULT_TRAJECTORY_MAX_ITEMS = 64
+
+export const trajectorySelectionBudgetPolicySchema = z.object({
+  contextWindowRatio: z.number().positive().max(1),
+  fallbackMaxTokens: z.number().int().positive(),
+  maxItems: z.number().int().positive(),
+})
+export type TrajectorySelectionBudgetPolicy = z.infer<typeof trajectorySelectionBudgetPolicySchema>
+
 export const trajectoryKindSchema = z.union([
   z.literal('user'), z.literal('turn'), z.literal('request'), z.literal('assistant'),
   z.literal('tool-call'), z.literal('tool-result'), z.literal('subagent'),
@@ -116,6 +127,7 @@ export const trajectoryChoiceSchema = z.object({
   digest: z.string().min(1),
   status: z.union([z.literal('success'), z.literal('error'), z.literal('cancelled'), z.literal('running')]).optional(),
   durationMs: nonNegativeIntegerSchema.optional(),
+  callId: z.string().min(1).optional(),
   toolName: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   parallelGroup: z.string().min(1).optional(),
@@ -460,6 +472,7 @@ export const trajectoryItemsValueSchema = z.object({
   items: z.array(trajectoryChoiceSchema),
   capturedThroughSeq: nonNegativeIntegerSchema,
   projectionVersion: z.string().min(1),
+  selectionBudgetPolicy: trajectorySelectionBudgetPolicySchema,
 })
 
 export interface SideChatResult<T> {

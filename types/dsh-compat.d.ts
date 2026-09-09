@@ -64,6 +64,12 @@ declare module '@deepseek-ai/dsh-client-connection/client' {
   }
 }
 
+declare module '@deepseek-ai/dsh-agent-default-model' {
+  export interface AgentDefaultModelConfig {
+    currentSelection(): { readonly provider: string; readonly model: string; readonly reasoningEffort?: string }
+  }
+}
+
 declare module '@deepseek-ai/dsh-llm' {
   export type ReasoningEffortId = string
   export function ReasoningEffortId(value: string): ReasoningEffortId

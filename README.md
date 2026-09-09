@@ -16,6 +16,9 @@ SideChat 不是临时浮层，也不是 subagent 或 fork。每个 SideChat 都�
 - Seed 内容与来源消息保存为不可变 provenance；
 - 可选择“只读模式”或“继承”权限；
 - 父 Session 中提供与“对话”“轨迹”并列的“子会话”视图；
+- 轨迹速览允许选择正式 SideChat Fold 结论继续提问，并保留 Fold 来源 marker；轨迹背景预算为目标模型上下文的 30%，容量不可得时回退 48k estimated token；
+- 轨迹速览按 Turn / Step 展示已投影的执行事件，调用与结果按 callId 关联；收起的 Turn 显示隐藏数量，“已选项目”清单支持查看、定位和移除；
+- 轨迹读取完整执行日志，保留已被上下文压缩替换的历史原事件，但不把压缩替换副本当作新执行；子代理仅展示父日志中的调用与真实返回，不虚构内部步骤；
 - SideChat 使用完整 DSH Session 页面，可恢复并继续多轮对话；
 - 支持模型生成、预览、编辑和提交结构化 Fold；
 - 支持 revision、增量 Fold、对比和软撤回；
@@ -185,6 +188,8 @@ Fold/Cite 使用 domain pending → 安全 append/flush → domain committed 三
 |---|---:|---|
 | `foldMaxTokens` | `500` | Fold 最大输出预算 |
 | `foldAppendThresholdRatio` | `0.8` | Fold 完整追加后的父上下文占用阈值；达到阈值时先压缩旧历史并重测，仍超阈值则不追加 |
+| `trajectoryContextWindowRatio` | `0.3` | 创建 SideChat 时允许轨迹背景占目标模型 context window 的比例 |
+| `trajectoryFallbackMaxTokens` | `48000` | 无法读取目标模型 context window 时的轨迹背景 estimated token 上限 |
 | `citeMaxTokens` | `500` | Cite 最大文本预算 |
 | `readMaxMessages` | `5` | 一次精确 Recall 最大消息数 |
 | `readMaxChars` | `20000` | 一次精确 Recall 最大字符数 |

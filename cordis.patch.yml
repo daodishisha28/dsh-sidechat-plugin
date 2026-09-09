@@ -22,6 +22,8 @@
       config:
         foldMaxTokens: 500
         foldAppendThresholdRatio: 0.8
+        trajectoryContextWindowRatio: 0.3
+        trajectoryFallbackMaxTokens: 48000
         citeMaxTokens: 500
         readMaxMessages: 5
         readMaxChars: 20000

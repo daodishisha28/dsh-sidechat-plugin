@@ -12,11 +12,12 @@
 | Tool 输出契约 | `defineTool()` 支持严格 input/output schema、render、并发安全声明 | 返回结构化 exact entries；renderer 添加“不可信背景”边界；最多 5 条并设字符预算 |
 | 独立摘要模型调用 | `ctx.llm.stream()` 与 `BlockAssembler` 是公开能力 | bounded Seed summary 单独调用 B 的已解析模型 route，不写父 transcript，不扩大工具权限 |
 | Task 式 Seed 调用 | `ctx.llm.stream()` 接受显式 provider/model/messages/maxTokens；`tools` 可省略 | 使用父会话最近 `request/header` route，回退父 Agent route；无 tools、最大 500 token，不写 A，不创建 A turn；成功后重验父 lifecycle identity 才创建 B |
+| 轨迹背景容量 | `agentDefaultModel.currentSelection()` 公开未来 Agent 的默认 route；`ctx.llm.resolveModelInfo()` 可返回目标模型公开的 `context.contextWindow` | 创建 B 前按目标模型 context window 的 30% 校验完整轨迹快照；容量不可得时回退 48k estimated token，不截断或压缩 |
 | 精确 token 用量 | `@deepseek-ai/dsh-token-meter/client` 公开 `deriveTurnTokenUsage()`；DSH durable message usage 区分 uncached input、cache read/write、output、reasoning 和 total | `/sideusage` 只聚合完整且内部有效的 turn；保存创建时父 usage 基线，并单列 task/summary 独立调用 usage |
 | 递归关系 | `storageDomain` 聚合记录可保存每条逻辑 parent/child edge | `tree` 从任意普通/SideChat Session 向下递归；每次 Fold/Cite/read 仍只授权一条直接边 |
 | 外部 Host/Client bridge | `connection.rpc.handle()` 可注册包自有、经过 Host/Origin 与浏览器认证的逻辑 RPC channel | v0.3.2 使用 `/sidechat` channel 和有限 endpoint switch；每个 endpoint 仍调用原有 Host 方法并重新验证业务参数 |
 
-`scripts/verify-dsh-contracts.mjs` 将 `readSession`、Agent registry、scoped tool registration、`llm.stream()` 的可选 tools 以及公开 token-meter fold 加入源码漂移检查。
+`scripts/verify-dsh-contracts.mjs` 将 `readSession`、Agent registry、scoped tool registration、默认模型选择、`llm.resolveModelInfo()`/`llm.stream()` 的可选 tools 以及公开 token-meter fold 加入源码漂移检查。
 
 Client bundle 必须保持 namespace plugin 导出 `{ apply, inject }`，不能同时导出 `default`。DSH Loader 会优先 unwrap `default`，导致 `inject` 元数据丢失并在访问 `locale` 等服务时拒绝加载。`smoke:manifest` 对该形状做了回归断言，隔离 Web smoke 还会验证实际 loader 应用成功。
 
