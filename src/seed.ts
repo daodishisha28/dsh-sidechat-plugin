@@ -1,3 +1,4 @@
+import { RECORDED_SESSION_FORMAT_VERSION } from './record-compat.ts'
 import type { SeedMessage, SeedMode, SeedProvenance } from './types.ts'
 
 interface EventLike {
@@ -155,6 +156,7 @@ export function makeSeedProvenance(input: {
     parentSessionId: input.parentSessionId,
     capturedThroughSeq: input.capturedThroughSeq,
     capturedAt: input.capturedAt,
+    coordinates: { epoch: 'v4-offset', logFormat: RECORDED_SESSION_FORMAT_VERSION },
     messages,
   }
 }

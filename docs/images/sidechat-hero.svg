@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">SideChat：把支线问题聊透，把结论带回主任务</title>
+  <desc id="desc">工作方式示意：父会话选取最小上下文创建独立 SideChat，讨论后通过 Fold 或 Cite 将结论带回父会话。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse"><stop stop-color="#F4F7FF"/><stop offset="1" stop-color="#F0F9F7"/></linearGradient>
+    <linearGradient id="accent" x1="55" y1="70" x2="450" y2="250" gradientUnits="userSpaceOnUse"><stop stop-color="#2563EB"/><stop offset="1" stop-color="#4542B7"/></linearGradient>
+    <marker id="blueArrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1L6 4L1 7" stroke="#4875D7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="greenArrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1L6 4L1 7" stroke="#258576" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <rect width="1200" height="520" rx="28" fill="url(#background)"/>
+  <rect x="0.5" y="0.5" width="1199" height="519" rx="27.5" stroke="#DEE6F1"/>
+  <g font-family="'Segoe UI','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+    <rect x="56" y="48" width="206" height="30" rx="15" fill="#E4ECFF"/>
+    <text x="74" y="68" fill="#355C9D" font-size="12" font-weight="600" letter-spacing="1.1">DEEPSEEK HARNESS PLUGIN</text>
+    <text x="53" y="169" fill="url(#accent)" font-size="82" font-weight="750" letter-spacing="-3">SideChat</text>
+    <text x="57" y="233" fill="#182D47" font-size="31" font-weight="600">把支线问题聊透，</text>
+    <text x="57" y="280" fill="#182D47" font-size="31" font-weight="600">把结论带回主任务。</text>
+    <text x="58" y="328" fill="#586D84" font-size="16">分支探索 · 节点级提问 · 按需引用结果</text>
+    <g font-size="14" font-weight="600">
+      <rect x="57" y="372" width="100" height="36" rx="10" fill="white" stroke="#DCE5F1"/><text x="79" y="395" fill="#355C9D">持久保存</text>
+      <rect x="169" y="372" width="100" height="36" rx="10" fill="white" stroke="#DCE5F1"/><text x="191" y="395" fill="#355C9D">继续追问</text>
+      <rect x="281" y="372" width="112" height="36" rx="10" fill="white" stroke="#DCE5F1"/><text x="303" y="395" fill="#355C9D">预览后回写</text>
+    </g>
+    <text x="58" y="470" fill="#738398" font-size="12" letter-spacing="1.6">OPEN A SIDE CONVERSATION. BRING BACK THE ANSWER.</text>
+    <rect x="562" y="53" width="581" height="153" rx="18" fill="white" stroke="#D5E0EF"/>
+    <circle cx="591" cy="82" r="5" fill="#527BE2"/>
+    <text x="607" y="88" fill="#263D59" font-size="16" font-weight="650">父会话 · 主任务</text>
+    <rect x="587" y="109" width="531" height="1" fill="#EDF1F7"/>
+    <text x="589" y="141" fill="#61738B" font-size="15">引用各分支的必要结果，继续主任务</text>
+    <path d="M590 171H816" stroke="#DCE5F2" stroke-width="7" stroke-linecap="round"/>
+    <path d="M837 171H982" stroke="#E7EDF6" stroke-width="7" stroke-linecap="round"/>
+    <path d="M693 207V276" stroke="#4875D7" stroke-width="2" marker-end="url(#blueArrow)"/>
+    <text x="714" y="244" fill="#4875A8" font-size="13">Seed：选取所需上下文</text>
+    <rect x="620" y="293" width="449" height="166" rx="18" fill="white" stroke="#B8D5D1"/>
+    <rect x="641" y="313" width="83" height="26" rx="8" fill="#E1F3EE"/>
+    <text x="653" y="331" fill="#267D70" font-size="13" font-weight="650">SideChat</text>
+    <text x="741" y="332" fill="#263D59" font-size="15" font-weight="600">独立讨论一个问题</text>
+    <text x="644" y="374" fill="#61738B" font-size="15">澄清假设 → 比较方案 → 形成结论</text>
+    <rect x="643" y="397" width="196" height="36" rx="9" fill="#EEF4FF"/>
+    <text x="661" y="420" fill="#4067A3" font-size="13">保留完整讨论，随时继续</text>
+    <path d="M1070 375H1112Q1123 375 1123 364V228Q1123 217 1112 217H1014V207" stroke="#258576" stroke-width="2" marker-end="url(#greenArrow)"/>
+    <rect x="966" y="239" width="132" height="38" rx="10" fill="#E3F2EC"/>
+    <text x="984" y="263" fill="#267D70" font-size="14" font-weight="650">Fold / Cite 回写</text>
+  </g>
+</svg>

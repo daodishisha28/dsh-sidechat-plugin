@@ -1,5 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+// Client sessions face: the `ctx.sessions` augmentation (ISessions) is declared
+// by this /client entry, alongside the ISessions type used below.
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -7,6 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { SeedMode } from '../types.ts'
 import { diffFoldText } from '../revision.ts'
 import { SideChatApi } from './api.ts'
@@ -25,7 +29,7 @@ import {
   type CommandWorkflowRequest,
 } from './workflow-events.ts'
 
-export const inject = ['connection', 'locale', 'slots', 'sessions', 'commandUi']
+export const inject = ['connection', 'locale', 'slots', 'sessions', 'commandUi', 'uiWorkspace']
 
 const destructiveConfirmation = (title: string, description: string, confirmLabel: string) => ({
   title,
@@ -42,8 +46,16 @@ export function apply(ctx: Context): void {
   ctx.effect(installStyles, 'sidechat: styles')
   const t = ctx.locale.bind(NS)
 
+  // Navigation runs through the alpha.2 cross-Controller capability
+  // (`ctx.uiWorkspace`); `ctx.sessions.open()` no longer exists. The plugin's
+  // Session ids are ordinary identity strings from Host RPC responses
+  // (sessionIdSchema), while SessionTarget takes a branded SessionId — the
+  // conversion happens at this single documented boundary and nowhere else,
+  // and tests/contracts proves a real `SessionId(...)` value satisfies
+  // SessionTarget. `sessions.refresh()` and the slot registrations stay.
+  const uiWorkspace: UiWorkspace = ctx.uiWorkspace
   const openSession = (value: string): void => {
-    ctx.sessions.open(value as SessionId)
+    uiWorkspace.openSession(value as SessionId)
   }
 
   const requestWorkflow = (request: CommandWorkflowRequest): void => {
@@ -108,7 +120,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'traceask',
-    description: '打开当前 Session 的轨迹可视化并选择事件发起 SideChat 提问',
+    description: () => t('command.traceask'),
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -121,7 +133,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'side',
-    description: '创建普通、持久化的 SideChat Session',
+    description: () => t('command.side'),
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -145,7 +157,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'btw',
-    description: '/side 的别名：创建普通、持久化的 SideChat Session',
+    description: () => t('command.btw'),
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -169,7 +181,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sideback',
-    description: '从当前 SideChat 返回其直接父会话',
+    description: () => t('command.sideback'),
     available: session => {
       const record = cachedRecord(session.sessionId)
       return record !== undefined && record !== null && record.status !== 'orphaned'
@@ -197,7 +209,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidechats',
-    description: '列出当前工作区 SideChat；当前 Session 的直接子会话优先',
+    description: () => t('command.sidechats'),
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -208,7 +220,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sideresume',
-    description: '选择已有 SideChat，打开完整 Session 后继续对话',
+    description: () => t('command.sideresume'),
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -219,7 +231,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidefold',
-    description: '让当前 SideChat 生成、预览并提交 Fold 到直接父会话',
+    description: () => t('command.sidefold'),
     available: session => usableSideChat(session.sessionId),
     ui: {
       kind: 'popupSelect',
@@ -256,7 +268,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidecompare',
-    description: '比较当前 SideChat 的两个 committed Fold revision',
+    description: () => t('command.sidecompare'),
     available: session => isSideChat(session.sessionId),
     ui: {
       kind: 'popupSelect',
@@ -287,7 +299,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidewithdraw',
-    description: '软撤回当前 SideChat 的指定 Fold revision，保留审计历史',
+    description: () => t('command.sidewithdraw'),
     available: session => usableSideChat(session.sessionId),
     ui: {
       kind: 'popupSelect',
@@ -322,7 +334,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidearchive',
-    description: '将当前 SideChat 标记为 archived',
+    description: () => t('command.sidearchive'),
     available: session => cachedRecord(session.sessionId)?.status === 'open',
     ui: {
       kind: 'popupSelect',
@@ -346,7 +358,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'siderestore',
-    description: '恢复当前 archived SideChat',
+    description: () => t('command.siderestore'),
     available: session => cachedRecord(session.sessionId)?.status === 'archived',
     ui: {
       kind: 'popupSelect',
@@ -365,7 +377,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sideabandon',
-    description: '将当前 SideChat 标记为 abandoned，保留原始 transcript',
+    description: () => t('command.sideabandon'),
     available: session => usableSideChat(session.sessionId),
     ui: {
       kind: 'popupSelect',
@@ -389,7 +401,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidecites',
-    description: '查看当前 SideChat 已创建的 Cite，并打开引用目标 Session',
+    description: () => t('command.sidecites'),
     available: session => isSideChat(session.sessionId),
     ui: {
       kind: 'popupSelect',
@@ -407,7 +419,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidecite',
-    description: '从 SideChat 选择 assistant 回复并无回复引用到父会话',
+    description: () => t('command.sidecite'),
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -450,7 +462,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sideusage',
-    description: '查看当前 SideChat、父会话增量和额外 Seed 调用的 token 用量',
+    description: () => t('command.sideusage'),
     available: session => isSideChat(session.sessionId),
     ui: {
       kind: 'popupSelect',
@@ -464,7 +476,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => ctx.commandUi.register({
     name: 'sidecite-cross',
-    description: '显式选择同工作区 SideChat 回复并引用到当前 Session（Host 默认关闭）',
+    description: () => t('command.sidecite-cross'),
     available: () => true,
     ui: {
       kind: 'popupSelect',

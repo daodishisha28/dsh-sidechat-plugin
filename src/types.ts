@@ -42,8 +42,11 @@ export const permissionSnapshotSchema = z.object({
   childSandboxMode: sandboxModeSchema,
   parentApprovalPolicy: approvalPolicySchema,
   childApprovalPolicy: approvalPolicySchema,
+  /** Terminal parent capability ceiling; never contains the PTC `run_code` transport. */
   parentTools: z.array(z.string().min(1)),
   allowedTools: z.array(z.string().min(1)),
+  /** Set when a migrated legacy snapshot's `run_code` transport was removed. */
+  transportRunCodeRemoved: z.boolean().optional(),
   capturedAt: nonNegativeIntegerSchema,
 })
 export type PermissionSnapshot = z.infer<typeof permissionSnapshotSchema>
@@ -91,9 +94,24 @@ export const sessionUsageSchema = z.object({
 })
 export type SessionUsage = z.infer<typeof sessionUsageSchema>
 
+export const DEFAULT_TRAJECTORY_CONTEXT_WINDOW_RATIO = 0.3
+export const DEFAULT_TRAJECTORY_FALLBACK_MAX_TOKENS = 48_000
+export const DEFAULT_TRAJECTORY_MAX_ITEMS = 64
+
+export const trajectorySelectionBudgetPolicySchema = z.object({
+  contextWindowRatio: z.number().positive().max(1),
+  fallbackMaxTokens: z.number().int().positive(),
+  maxItems: z.number().int().positive(),
+})
+export type TrajectorySelectionBudgetPolicy = z.infer<typeof trajectorySelectionBudgetPolicySchema>
+
 export const trajectoryKindSchema = z.union([
   z.literal('user'), z.literal('turn'), z.literal('request'), z.literal('assistant'),
   z.literal('tool-call'), z.literal('tool-result'), z.literal('subagent'),
+  // PTC sub-dispatch inside one run_code program: `tool/ptc-dispatch-start`
+  // paired with `tool/ptc-dispatch` by `subCallId`. Never counted as an
+  // additional outer call and never a second usage sample.
+  z.literal('ptc'),
   z.literal('error'), z.literal('fold-note'),
 ])
 export type TrajectoryKind = z.infer<typeof trajectoryKindSchema>
@@ -116,6 +134,7 @@ export const trajectoryChoiceSchema = z.object({
   digest: z.string().min(1),
   status: z.union([z.literal('success'), z.literal('error'), z.literal('cancelled'), z.literal('running')]).optional(),
   durationMs: nonNegativeIntegerSchema.optional(),
+  callId: z.string().min(1).optional(),
   toolName: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   parallelGroup: z.string().min(1).optional(),
@@ -162,11 +181,50 @@ export const trajectorySeedSchema = z.object({
 })
 export type TrajectorySeed = z.infer<typeof trajectorySeedSchema>
 
+export const sessionIdentitySchema = z.object({
+  createdAt: nonNegativeIntegerSchema,
+  cwd: z.string().optional(),
+})
+export type SessionIdentity = z.infer<typeof sessionIdentitySchema>
+
+/**
+ * Coordinate epoch of a stored position. `v4-offset` coordinates are exclusive
+ * next-event offsets captured under one DSH log format generation;
+ * `legacy-v1` numbers are frozen pre-alpha.2 inclusive positions kept only as
+ * historical evidence — they must never be numerically converted without
+ * confirming the same log generation.
+ */
+export const recordEpochSchema = z.union([
+  z.literal('v4-offset'),
+  z.literal('legacy-v1'),
+])
+export type RecordEpoch = z.infer<typeof recordEpochSchema>
+
+export const seedCoordinatesSchema = z.object({
+  epoch: recordEpochSchema,
+  logFormat: nonNegativeIntegerSchema.optional(),
+})
+export type SeedCoordinates = z.infer<typeof seedCoordinatesSchema>
+
+export const foldCoordinatesSchema = z.object({
+  epoch: recordEpochSchema,
+  /** DSH SESSION_FORMAT_VERSION captured with the offsets (v4-offset only). */
+  logFormat: nonNegativeIntegerSchema.optional(),
+  /** Exclusive baseline: generation events satisfy `seq >= baselineNextSeq`. */
+  baselineNextSeq: nonNegativeIntegerSchema.optional(),
+  /** Exclusive preview tail: `nextSeq > previewNextSeq` means new child events. */
+  previewNextSeq: nonNegativeIntegerSchema.optional(),
+})
+export type FoldCoordinates = z.infer<typeof foldCoordinatesSchema>
+
 export const seedProvenanceSchema = z.object({
   mode: seedModeSchema,
   parentSessionId: sessionIdSchema,
+  /** Frozen historical capture position; semantics per `coordinates.epoch`. */
   capturedThroughSeq: nonNegativeIntegerSchema,
   capturedAt: nonNegativeIntegerSchema,
+  /** Coordinate epoch of the frozen capture; defaults to legacy v1. */
+  coordinates: seedCoordinatesSchema.optional(),
   messages: z.array(seedMessageSchema),
   summary: z.object({
     text: z.string().min(1),
@@ -186,8 +244,11 @@ export const seedProvenanceSchema = z.object({
     droppedOlderMessages: nonNegativeIntegerSchema,
   }).optional(),
   trajectory: trajectorySeedSchema.optional(),
+}).transform((seed) => {
+  const coordinates: SeedCoordinates = seed.coordinates ?? { epoch: 'legacy-v1' }
+  return { ...seed, coordinates }
 })
-export type SeedProvenance = z.infer<typeof seedProvenanceSchema>
+export type SeedProvenance = z.output<typeof seedProvenanceSchema>
 
 export const modelSelectionSchema = z.object({
   provider: z.string().min(1),
@@ -202,12 +263,6 @@ export const modelStrategySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('custom'), selection: modelSelectionSchema }),
 ])
 export type ModelStrategy = z.infer<typeof modelStrategySchema>
-
-export const sessionIdentitySchema = z.object({
-  createdAt: nonNegativeIntegerSchema,
-  cwd: z.string().optional(),
-})
-export type SessionIdentity = z.infer<typeof sessionIdentitySchema>
 
 export const operationStateSchema = z.union([
   z.literal('generating'),
@@ -241,13 +296,22 @@ export const foldRecordSchema = z.object({
   state: operationStateSchema,
   generatedContent: z.string(),
   committedContent: z.string().optional(),
-  baselineSeq: nonNegativeIntegerSchema,
-  previewThroughSeq: nonNegativeIntegerSchema,
+  /**
+   * Legacy v1 inclusive capture positions, preserved as frozen evidence.
+   * Only meaningful while `coordinates.epoch === 'legacy-v1'`; never
+   * numerically converted to the new offset space.
+   */
+  baselineSeq: nonNegativeIntegerSchema.optional(),
+  previewThroughSeq: nonNegativeIntegerSchema.optional(),
+  /** Coordinate epoch and, for v4-offset records, the exclusive offsets. */
+  coordinates: foldCoordinatesSchema.optional(),
   estimatedTokens: nonNegativeIntegerSchema,
   structureValid: z.boolean(),
   createdAt: nonNegativeIntegerSchema,
   updatedAt: nonNegativeIntegerSchema,
   committedAt: nonNegativeIntegerSchema.optional(),
+  /** Stable message id of the delivered parent notice (v2 anchor). */
+  committedMessageId: messageIdSchema.optional(),
   failure: z.string().optional(),
   mode: foldModeSchema.optional(),
   baseRevision: z.number().int().positive().optional(),
@@ -257,8 +321,23 @@ export const foldRecordSchema = z.object({
   withdrawalState: operationStateSchema.optional(),
   withdrawalReason: z.string().max(2_000).optional(),
   withdrawnAt: nonNegativeIntegerSchema.optional(),
+}).superRefine((fold, ctx) => {
+  if ((fold.coordinates?.epoch ?? 'legacy-v1') === 'v4-offset') {
+    const coordinates = fold.coordinates
+    if (fold.baselineSeq !== undefined) ctx.addIssue({ code: 'custom', path: ['baselineSeq'], message: 'v4-offset folds must not carry legacy inclusive baselines' })
+    if (fold.previewThroughSeq !== undefined) ctx.addIssue({ code: 'custom', path: ['previewThroughSeq'], message: 'v4-offset folds must not carry legacy inclusive previews' })
+    if (coordinates?.baselineNextSeq === undefined) ctx.addIssue({ code: 'custom', path: ['coordinates'], message: 'v4-offset folds require baselineNextSeq' })
+    if (coordinates?.previewNextSeq === undefined) ctx.addIssue({ code: 'custom', path: ['coordinates'], message: 'v4-offset folds require previewNextSeq' })
+    return
+  }
+  if (fold.baselineSeq === undefined || fold.previewThroughSeq === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['baselineSeq'], message: 'legacy-v1 folds preserve their original inclusive positions' })
+  }
+}).transform((fold) => {
+  const coordinates: FoldCoordinates = fold.coordinates ?? { epoch: 'legacy-v1' }
+  return { ...fold, coordinates }
 })
-export type FoldRecord = z.infer<typeof foldRecordSchema>
+export type FoldRecord = z.output<typeof foldRecordSchema>
 
 export const citeRecordSchema = z.object({
   citeId: operationIdSchema,
@@ -269,6 +348,8 @@ export const citeRecordSchema = z.object({
   createdAt: nonNegativeIntegerSchema,
   updatedAt: nonNegativeIntegerSchema,
   committedAt: nonNegativeIntegerSchema.optional(),
+  /** Stable message id of the delivered parent notice (v2 anchor). */
+  committedMessageId: messageIdSchema.optional(),
   failure: z.string().optional(),
   targetSessionId: sessionIdSchema.optional(),
   target: sessionIdentitySchema.optional(),
@@ -285,7 +366,12 @@ export const sideChatStatusSchema = z.union([
 export type SideChatStatus = z.infer<typeof sideChatStatusSchema>
 
 export const sideChatRecordSchema = z.object({
-  schema: z.literal(1),
+  /** Record schema generation: legacy v1 or current v2 (see record-compat). */
+  schema: z.union([z.literal(1), z.literal(2)]),
+  /** DSH SESSION_FORMAT_VERSION captured at creation (v2 records only). */
+  logFormat: nonNegativeIntegerSchema.optional(),
+  /** Plugin projection version captured at creation (v2 records only). */
+  projectionVersion: z.string().min(1).optional(),
   childSessionId: sessionIdSchema,
   parentSessionId: sessionIdSchema,
   parent: sessionIdentitySchema,
@@ -306,8 +392,12 @@ export const sideChatRecordSchema = z.object({
   revision: nonNegativeIntegerSchema,
   folds: z.array(foldRecordSchema),
   cites: z.array(citeRecordSchema),
+}).superRefine((record, ctx) => {
+  if (record.schema !== 2) return
+  if (record.logFormat === undefined) ctx.addIssue({ code: 'custom', path: ['logFormat'], message: 'v2 records record the Session log format generation' })
+  if (record.projectionVersion === undefined) ctx.addIssue({ code: 'custom', path: ['projectionVersion'], message: 'v2 records record the plugin projection version' })
 })
-export type SideChatRecord = z.infer<typeof sideChatRecordSchema>
+export type SideChatRecord = z.output<typeof sideChatRecordSchema>
 
 export const createSideChatRequestSchema = z.object({
   parentSessionId: sessionIdSchema,
@@ -460,6 +550,7 @@ export const trajectoryItemsValueSchema = z.object({
   items: z.array(trajectoryChoiceSchema),
   capturedThroughSeq: nonNegativeIntegerSchema,
   projectionVersion: z.string().min(1),
+  selectionBudgetPolicy: trajectorySelectionBudgetPolicySchema,
 })
 
 export interface SideChatResult<T> {

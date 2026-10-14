@@ -188,8 +188,10 @@ Turn 12 · 运行 18.4s · 2 tools · 失败 0
 - 列表预览保持技术限流，截断必须标记为 `truncated`，不能借用 `redacted` 表达；
 - 完整工具内容只允许通过当前 Session 中可见事件的精确 `seq + eventId + kind + digest` 读取，不能请求任意日志 dump；
 - UI 必须提示工具原文可能包含敏感信息，用户应在加入 SideChat 前确认；
-- plugin 注入消息默认不作为轨迹背景选择，防止递归注入 SideChat 指令；
-- 每个事件和整个选择集合都有字符/token 上限；超过上限时要求用户减少选择，不静默截断关键内容；
+- plugin 注入消息默认不作为轨迹背景选择；带正式 `[SideChat fold ...]` 或 `[SideChat cite ...]` 来源标记的 Fold/Cite 回流内容例外，允许继续选择提问，Fold 撤回和缺少可靠来源标记的兼容旧节点保持只读；
+- Turn 是分组选择器：选择或取消 Turn 必须同步选择或取消其中全部可选子节点；提交时只发送这些子节点快照，不额外发送重复的 Turn 标签摘要。仅部分子节点被选择时，Turn 只能显示部分选择状态，不能使用完整选中高亮；
+- Fold 继续提问保留原始 `fold id`、revision 和 source Session marker；当前版本不限制递归深度；
+- 单次最多选择 64 项。创建前若能读取目标模型 `contextWindow`，轨迹背景预算为其 30%；无法读取时回退 48k estimated token。超过上限时要求用户减少选择，不静默截断或压缩关键内容；
 - 所有被选文本在 B 中标识为背景数据，不提供工具授权。
 
 ---
@@ -219,7 +221,7 @@ type TrajectoryChoice = {
 }
 ```
 
-`preview` 只用于有界列表展示。`chars` 和 token 估算按最终可选内容计算。创建时 Host 必须根据 `sourceSessionId + seq/eventId + kind + digest` 重新读取并生成最终快照，不能信任浏览器传回的文本。工具快照使用完整原文而不是截断预览。
+`preview` 只用于有界列表展示。`chars` 和 token 估算按最终可选内容计算。创建时 Host 必须根据 `sourceSessionId + seq/eventId + kind + digest` 重新读取并生成最终快照，不能信任浏览器传回的文本。工具快照使用完整原文而不是截断预览。Host 在创建子 Session 前根据目标模型公开元数据计算轨迹预算；模型容量不可得时使用 48k fallback。
 
 ### 6.2 轨迹快照 provenance
 
@@ -417,6 +419,7 @@ SideChat Fold · rev-1 · no-reply append（压力压缩调用另计）
 
 注释提供：
 
+- 对带正式来源 marker 的 Fold 结论执行“选择此项”，作为另一个 SideChat 的不可信轨迹背景；
 - 打开来源 B；
 - 回到原轨迹事件；
 - 查看 Fold revision；
@@ -424,6 +427,8 @@ SideChat Fold · rev-1 · no-reply append（压力压缩调用另计）
 - 查看“未触发父模型调用”。
 
 Fold marker 和 domain record 应保存原始轨迹来源摘要、source Session、capture seq 和 selected refs，但父消息正文保持有界。
+
+Fold/Cite 再次进入轨迹 Seed 时必须分别保留 `[SideChat fold id=... rev=... source=...]` 与 `[SideChat cite id=... source=... message=...]` marker。Fold 撤回注释不开放选择。当前版本允许用户继续选择回流内容形成新的 SideChat，不设置递归深度上限；每次创建仍独立执行目标模型 30% context window / 48k fallback 的背景预算检查。
 
 ### 10.3 A running 时的反馈
 
@@ -504,6 +509,14 @@ Fold 已确认，等待父会话当前回复结束后追加到最新位置。
 ---
 
 ## 14. 验收标准
+
+### 执行关系实现补充（2026-09-05）
+
+轨迹总览、节点列表、完整详情和轨迹 Seed 校验使用同一投影规则读取完整 Session 日志，普通 Seed 仍读取当前模型上下文。历史 append-origin 事件保留，压缩产生的 surface replacement 副本不作为新执行绘制。投影仅返回支持的安全字段/内容，不向浏览器返回完整原始日志。
+
+展开 Turn 后展示全部已投影事件及其 Step 分组，按 callId 连接调用和结果。相同响应的多调用只标记同批，不声称已证实并行执行；缺少 Step 或关联信息时保持日志顺序，不猜测其所属步骤或因果。没有真实内部日志时不生成子代理内部 Turn，返回卡作为真实结果的可视别名，选择和详情均使用原结果引用，不重复计数。
+
+折叠 Turn 显示隐藏的真实事件数量；已选项目清单可以查看、定位、逐项移除，并与 Turn/子节点选择和实际创建引用保持一致。完整实施计划、返修记录与验收范围见 [执行关系准确性计划](TRAJECTORY_EXECUTION_ACCURACY_PLAN.md)。
 
 ### 功能
 

@@ -7,7 +7,6 @@ const host: UserConfig = {
   name: 'dsh-sidechat-plugin/host',
   entry: {
     index: 'lib/types/index.js',
-    'preset-root': 'lib/types/preset-root.js',
   },
   outDir: 'lib',
   format: 'esm',

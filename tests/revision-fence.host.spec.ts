@@ -24,8 +24,10 @@ function event(seq: number, type: string, data: unknown): SessionEvent {
 }
 
 function header(id: string, createdAt: number): SessionHeader {
-  return { id, createdAt, cwd: 'C:\\work' } as unknown as SessionHeader
+  return { id, createdAt, cwd: 'C:\\work', isSeeded: false, version: 4 } as unknown as SessionHeader
 }
+
+const RECORD_PROJECTION_VERSION = 'test-projection-v1'
 
 const REV_1 = '11111111-1111-4111-8111-111111111111'
 const REV_2 = '22222222-2222-4222-8222-222222222222'
@@ -33,17 +35,19 @@ const REV_2 = '22222222-2222-4222-8222-222222222222'
 function fold(id: string, revision: number, state: FoldRecord['state'], extra: Partial<FoldRecord> = {}): FoldRecord {
   return {
     foldId: id, revision, state, generatedContent: `generated rev-${revision}`,
-    baselineSeq: 0, previewThroughSeq: 5, estimatedTokens: 10, structureValid: true,
+    coordinates: { epoch: 'v4-offset', logFormat: 4, baselineNextSeq: 0, previewNextSeq: 5 },
+    estimatedTokens: 10, structureValid: true,
     createdAt: 3, updatedAt: 3, ...extra,
   }
 }
 
 function sidechat(folds: FoldRecord[], revision: number): SideChatRecord {
   return {
-    schema: 1, childSessionId: 'child', parentSessionId: 'parent',
+    schema: 2, logFormat: 4, projectionVersion: RECORD_PROJECTION_VERSION,
+    childSessionId: 'child', parentSessionId: 'parent',
     parent: { createdAt: 1, cwd: 'C:\\work' }, child: { createdAt: 2, cwd: 'C:\\work' },
     question: 'q', title: 't', status: 'open',
-    seed: { mode: 'none', parentSessionId: 'parent', capturedThroughSeq: 0, capturedAt: 2, messages: [] },
+    seed: { mode: 'none', parentSessionId: 'parent', capturedThroughSeq: 0, capturedAt: 2, coordinates: { epoch: 'v4-offset', logFormat: 4 }, messages: [] },
     modelStrategy: { kind: 'default' }, createdAt: 2, updatedAt: 3,
     revision, folds, cites: [],
   }
@@ -78,8 +82,8 @@ function makeHarness(table: MemoryTable) {
   }
   const sessionController = {
     inspect: vi.fn(async (sessionId: string) => {
-      if (sessionId === 'parent') return { meta: header('parent', 1), events: parentEvents }
-      if (sessionId === 'child') return { meta: header('child', 2), events: childEvents }
+      if (sessionId === 'parent') return { meta: header('parent', 1), events: parentEvents, inheritedEventCount: 0 }
+      if (sessionId === 'child') return { meta: header('child', 2), events: childEvents, inheritedEventCount: 0 }
       throw new Error('not found')
     }),
     resolveAgent: vi.fn(async (sessionId: string) => sessionId === 'parent'
@@ -88,6 +92,17 @@ function makeHarness(table: MemoryTable) {
   }
   const ctx = new Context()
   ctx.provide('sessionController', sessionController)
+  ctx.provide('sessionQuery', {
+    readSession: vi.fn(async (sessionId: string) => ({
+      session: sessionId === 'parent' ? header('parent', 1) : header('child', 2),
+      inheritedEventCount: 0,
+      events: sessionId === 'parent' ? parentEvents : childEvents,
+    })),
+  })
+  ctx.provide('agentPresets', {
+    composedPreset: vi.fn(() => undefined),
+    serviceFor: vi.fn(() => undefined),
+  })
   ctx.provide('sessions', { flush })
   ctx.provide('tokenMeter', { measure: () => ({ totalTokens: 0 }), estimateMessage: () => 50 })
   const service = new SideChatService(ctx)
@@ -160,12 +175,51 @@ describe('commitFold revision fencing', () => {
     table.rows.set('child', sidechat([rev1, rev2], 2))
     const harness = makeHarness(table)
 
+    // The idempotent path requires the IDENTICAL frozen content.
     const result = await harness.service.commitFold({
-      childSessionId: 'child', foldId: REV_2, content: foldContent('v2 again'), allowStale: true,
+      childSessionId: 'child', foldId: REV_2, content: 'v2', allowStale: true,
     })
 
     expect(result).toMatchObject({ ok: true, value: { state: 'committed' } })
     expect(table.rows.get('child')!.folds.find(item => item.foldId === REV_2)).toMatchObject({ revisionState: 'current' })
+    expect(parentMessages(harness.parentEvents)).toHaveLength(0)
+  })
+
+  it('rejects a commitFold retry that tries to change the frozen payload of a pending or committed fold', async () => {
+    const table = new MemoryTable()
+    const rev1 = fold(REV_1, 1, 'prepared')
+    const rev2 = fold(REV_2, 2, 'pending', { committedContent: 'v2', updatedAt: 4 })
+    table.rows.set('child', sidechat([rev1, rev2], 2))
+    const harness = makeHarness(table)
+
+    const result = await harness.service.commitFold({
+      childSessionId: 'child', foldId: REV_2, content: foldContent('v2 rewritten payload'), allowStale: true,
+    })
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'payload-frozen' } })
+    expect(table.rows.get('child')!.folds.find(item => item.foldId === REV_2)).toMatchObject({ state: 'pending', committedContent: 'v2' })
+    expect(parentMessages(harness.parentEvents)).toHaveLength(0)
+  })
+
+  it('rejects a withdrawal retry that tries to change the frozen reason, and keeps the identical retry idempotent', async () => {
+    const table = new MemoryTable()
+    const rev1 = fold(REV_1, 1, 'committed', {
+      committedContent: 'v1', revisionState: 'withdrawn', withdrawalState: 'committed',
+      withdrawalReason: 'obsolete', withdrawnAt: 5, updatedAt: 5,
+    })
+    table.rows.set('child', sidechat([rev1], 1))
+    const harness = makeHarness(table)
+
+    const changed = await harness.service.withdrawFold({
+      childSessionId: 'child', foldId: REV_1, reason: 'a completely different reason',
+    })
+    expect(changed).toMatchObject({ ok: false, error: { code: 'payload-frozen' } })
+    expect(table.rows.get('child')!.folds[0]).toMatchObject({ withdrawalState: 'committed', withdrawalReason: 'obsolete' })
+
+    const identical = await harness.service.withdrawFold({
+      childSessionId: 'child', foldId: REV_1, reason: 'obsolete',
+    })
+    expect(identical).toMatchObject({ ok: true, value: { state: 'committed' } })
     expect(parentMessages(harness.parentEvents)).toHaveLength(0)
   })
 

@@ -9,6 +9,12 @@ export class Context {
     Object.defineProperty(this, name, { configurable: true, enumerable: true, value, writable: true })
     return () => { Reflect.deleteProperty(this, name) }
   }
+
+  /** Test shim: grants resolve immediately, mirroring satisfied injects. */
+  inject(names: readonly string[], callback: (granted: Context) => void): void {
+    void names
+    callback(this)
+  }
 }
 
 export class Service {
@@ -54,7 +60,13 @@ export default schemastery
 
 export function SessionId(value: string): string { return value }
 export function ReasoningEffortId(value: string): string { return value }
-export function createUserMessage<T>(value: T): T { return value }
+export const PERSONA_PREFIX_SECTION = 'deployment:persona-prefix'
+export const PERSONA_SUFFIX_SECTION = 'deployment:persona-suffix'
+let shimMessageCounter = 0
+export function createUserMessage<T extends { readonly content: unknown; readonly source: unknown }>(value: T): T & { id: string; role: 'user' } {
+  shimMessageCounter += 1
+  return { ...value, id: `shim-message-${shimMessageCounter}`, role: 'user' as const }
+}
 export function boundContextSummary<T>(value: T): T { return value }
 export function setSandboxMode(session: { append: (type: string, data: unknown) => void }, mode: string): void {
   session.append('sandbox/mode', { mode })

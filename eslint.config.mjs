@@ -14,5 +14,6 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
     },
   },
-  { ignores: ['lib/**', 'node_modules/**'] },
+  // The alpha.2 type fixture is compile-only (checked by tsc via verify:real-exports), not shipped or linted.
+  { ignores: ['lib/**', 'node_modules/**', 'tests/contracts/alpha2-fixture/**'] },
 )

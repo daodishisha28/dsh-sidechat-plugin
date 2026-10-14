@@ -19,15 +19,21 @@ function messageText(value: unknown): string {
 export function exactMessageCatalog(events: readonly SessionEvent[]): SideChatReadEntry[] {
   const result: SideChatReadEntry[] = []
   for (const event of events) {
+    const data = object(event.data)
+    if (data === undefined) continue
     if (event.type === 'user/message') {
-      if (event.data.source.kind !== 'user') continue
-      const text = messageText(event.data)
-      if (text !== '') result.push({ messageId: event.data.id, role: 'user', text, seq: event.seq })
+      const source = object(data['source'])
+      if (source?.['kind'] !== 'user') continue
+      const text = messageText(data)
+      const messageId = data['id']
+      if (text !== '' && typeof messageId === 'string') result.push({ messageId, role: 'user', text, seq: event.seq })
       continue
     }
     if (event.type !== 'assistant/message') continue
-    const text = messageText(event.data.message)
-    if (text !== '') result.push({ messageId: event.data.message.id, role: 'assistant', text, seq: event.seq })
+    const message = object(data['message'])
+    const text = messageText(message)
+    const messageId = message?.['id']
+    if (text !== '' && typeof messageId === 'string') result.push({ messageId, role: 'assistant', text, seq: event.seq })
   }
   return result
 }

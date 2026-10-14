@@ -1,7 +1,12 @@
 packages:
   - .
+  # Real published-export type fixture importer (checked by verify:real-exports).
+  - tests/contracts/alpha2-fixture
 
-# DSH supplies all @deepseek-ai/* peers at plugin runtime. They are
-# intentionally not fetched into this standalone source checkout.
+# DSH supplies all @deepseek-ai/* peers at plugin runtime, and autoInstallPeers
+# stays off for the plugin package itself. The alpha2-fixture importer below is
+# the one exception: it declares the pinned @deepseek-ai/* packages as real
+# dependencies, so `pnpm install` DOES fetch them into
+# tests/contracts/alpha2-fixture/node_modules for the real-export type checks.
 autoInstallPeers: false
 confirmModulesPurge: false
