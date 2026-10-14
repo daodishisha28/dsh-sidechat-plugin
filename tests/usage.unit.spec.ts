@@ -38,6 +38,46 @@ describe('SideChat usage projection', () => {
     })
   })
 
+  it('never counts a compaction replacement copy as a second usage sample', () => {
+    const original = turn(1, 1, 10, 2)
+    // A compaction replacement re-appends the settled assistant message as a
+    // surface copy of prior content; it is not another billed attempt. Real
+    // alpha.2 shape: `{ op: 'replace', startSeq, endSeq }` (upstream
+    // packages/core/session/src/types.ts SurfaceOp) referencing the earlier
+    // assistant message at seq 3.
+    const replacement: SessionEvent = {
+      seq: 20, time: 20, type: 'assistant/message',
+      surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 },
+      data: {
+        turn: 1, step: 1,
+        message: { id: 'a1', role: 'assistant', content: [{ type: 'text', text: 'done' }], source: { kind: 'model', provider: 'p', model: 'm' } },
+        usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+      },
+    } as SessionEvent
+    const withReplacement = deriveSessionUsage([...original, replacement])
+    expect(withReplacement).toMatchObject({
+      complete: true,
+      completedTurns: 1,
+      totals: { uncachedInputTokens: 10, outputTokens: 2, totalTokens: 12 },
+    })
+  })
+
+  it('reports unknown instead of inventing numbers when usage evidence is missing', () => {
+    const noUsage: SessionEvent[] = [
+      event(1, 'turn/start', { turn: 1 }),
+      event(2, 'step/start', { turn: 1, step: 1 }),
+      event(3, 'assistant/message', {
+        turn: 1, step: 1,
+        message: { id: 'a1', role: 'assistant', content: [{ type: 'text', text: 'no accounting' }], source: { kind: 'model', provider: 'p', model: 'm' } },
+      }),
+      event(4, 'step/end', { turn: 1, step: 1 }),
+      event(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+    ]
+    expect(deriveSessionUsage(noUsage)).toEqual({
+      complete: false, completedTurns: 0, incompleteTurns: 1,
+    })
+  })
+
   it('subtracts only complete exact baselines', () => {
     const baseline = deriveSessionUsage(turn(1, 1, 10, 2))
     const current = deriveSessionUsage([...turn(1, 1, 10, 2), ...turn(10, 2, 20, 3)])

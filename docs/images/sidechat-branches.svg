@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">多分支分别探索，主会话按需引用结果</title>
+  <desc id="desc">主会话的缓存模块改造任务分成架构方案、实现约束和测试边界三个 SideChat。完整讨论保留在分支，选定的 Fold 结论和 Cite 回答被逐次带回主会话，作为进一步综合讨论的背景。</desc>
+  <defs>
+    <marker id="out" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1L6 4L1 7" stroke="#6888BE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="back" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1L6 4L1 7" stroke="#278777" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <rect width="1200" height="650" rx="24" fill="#F5F8FC"/>
+  <g font-family="'Segoe UI','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+    <rect x="330" y="27" width="540" height="92" rx="15" fill="#E7EEFC"/>
+    <text x="600" y="64" text-anchor="middle" fill="#2D4D7C" font-size="22" font-weight="650">主会话：改造缓存模块</text>
+    <text x="600" y="94" text-anchor="middle" fill="#607895" font-size="14">按问题分支展开，每个 SideChat 带入所需背景</text>
+    <g stroke="#6888BE" stroke-width="1.8" marker-end="url(#out)"><path d="M600 120V151H210V185"/><path d="M600 120V185"/><path d="M600 120V151H990V185"/></g>
+    <g fill="white" stroke="#D8E2EE"><rect x="40" y="195" width="340" height="148" rx="15"/><rect x="430" y="195" width="340" height="148" rx="15"/><rect x="820" y="195" width="340" height="148" rx="15"/></g>
+    <g font-size="21" font-weight="650" fill="#294563"><text x="64" y="231">分支 A · 架构方案</text><text x="454" y="231">分支 B · 实现约束</text><text x="844" y="231">分支 C · 测试边界</text></g>
+    <g fill="#617891" font-size="15"><text x="64" y="267">比较 LRU / TTL 与组合策略</text><text x="454" y="267">梳理调用链与兼容性要求</text><text x="844" y="267">分析过期、淘汰与并发边界</text></g>
+    <g fill="#8999AD" font-size="13"><text x="64" y="315">完整讨论与执行细节保留在此分支</text><text x="454" y="315">完整讨论与执行细节保留在此分支</text><text x="844" y="315">完整讨论与执行细节保留在此分支</text></g>
+    <g stroke="#278777" stroke-width="1.8" marker-end="url(#back)"><path d="M210 344V361"/><path d="M600 344V361"/><path d="M990 344V361"/></g>
+    <g fill="#E3F2EC" stroke="#BBDCCE"><rect x="62" y="374" width="296" height="48" rx="11"/><rect x="452" y="374" width="296" height="48" rx="11"/><rect x="842" y="374" width="296" height="48" rx="11"/></g>
+    <g fill="#257C68" font-size="16" font-weight="600" text-anchor="middle"><text x="210" y="404">Fold：策略取舍与依据</text><text x="600" y="404">Cite：选定的一条回答</text><text x="990" y="404">Fold：需要补充的测试清单</text></g>
+    <g stroke="#278777" stroke-width="1.8"><path d="M210 423V461H990V423"/><path d="M600 423V492" marker-end="url(#back)"/></g>
+    <rect x="170" y="505" width="860" height="112" rx="16" fill="white" stroke="#BBDCCE"/>
+    <text x="600" y="543" text-anchor="middle" fill="#264B46" font-size="21" font-weight="650">主上下文：主任务 + 结论 A + 引用 B + 结论 C</text>
+    <text x="600" y="580" text-anchor="middle" fill="#5B786F" font-size="16">“结合三个分支结果，整理实现计划和验收标准。”</text>
+  </g>
+</svg>

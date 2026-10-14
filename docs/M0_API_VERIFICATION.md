@@ -4,6 +4,8 @@
 
 本文记录第一阶段实现所依赖的真实公共接口。它是实现约束，不是对设计文档的替代。
 
+> **alpha.2 状态更新（2026-10-12）**：本文是 alpha.1 基线的历史核验记录，正文保留不改。DSH `0.2.1-alpha.2` 适配后的事实差异以 [DSH 0.2 实施报告](DSH_0.2_IMPLEMENTATION_REPORT.md) 为准，其中与本文直接相关的修正包括：`ctx.sessions.open()` 已移除（导航统一 `ctx.uiWorkspace.openSession`）；命令 `description` 改为 `() => string` 回调；共享 `kind:'plugin'` 消息来源已删除（改为 merge-extensible 的 `plugin:dsh-sidechat`）；session 同步事件读取已移除（`sessionQuery` 异步精确读取）；`@deepseek-ai/dsh-token-meter/client` 在 alpha.2 真实发布（此前 "TS2307 未发布" 为 fixture tsconfig 通配符误诊）。
+
 ## 已验证 API
 
 | 能力 | 源码结论 | 本插件采用方式 |

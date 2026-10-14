@@ -21,8 +21,10 @@ class MemoryTable {
 }
 
 function header(id: string, createdAt: number): SessionHeader {
-  return { id, createdAt, cwd: 'C:\\work' } as unknown as SessionHeader
+  return { id, createdAt, cwd: 'C:\\work', isSeeded: false, version: 4 } as unknown as SessionHeader
 }
+
+const RECORD_PROJECTION_VERSION = 'test-projection-v1'
 
 function foldContent(): string {
   return [
@@ -41,15 +43,16 @@ function record(): SideChatRecord {
     revision: 1,
     state: 'prepared',
     generatedContent: foldContent(),
-    baselineSeq: 0,
-    previewThroughSeq: 0,
+    coordinates: { epoch: 'v4-offset', logFormat: 4, baselineNextSeq: 0, previewNextSeq: 0 },
     estimatedTokens: 20,
     structureValid: true,
     createdAt: 3,
     updatedAt: 3,
   }
   return {
-    schema: 1,
+    schema: 2,
+    logFormat: 4,
+    projectionVersion: RECORD_PROJECTION_VERSION,
     childSessionId: 'child',
     parentSessionId: 'parent',
     parent: { createdAt: 1, cwd: 'C:\\work' },
@@ -57,7 +60,7 @@ function record(): SideChatRecord {
     question: 'q',
     title: 't',
     status: 'open',
-    seed: { mode: 'none', parentSessionId: 'parent', capturedThroughSeq: 0, capturedAt: 2, messages: [] },
+    seed: { mode: 'none', parentSessionId: 'parent', capturedThroughSeq: 0, capturedAt: 2, coordinates: { epoch: 'v4-offset', logFormat: 4 }, messages: [] },
     modelStrategy: { kind: 'default' },
     createdAt: 2,
     updatedAt: 3,
@@ -122,9 +125,21 @@ function harness(initialTokens: number, compactedTokens: number | null) {
   const ctx = new Context()
   ctx.provide('sessionController', {
     inspect: vi.fn(async (sessionId: string) => sessionId === 'parent'
-      ? { meta: header('parent', 1), events: parentEvents }
-      : { meta: header('child', 2), events: childEvents }),
+      ? { meta: header('parent', 1), events: parentEvents, inheritedEventCount: 0 }
+      : { meta: header('child', 2), events: childEvents, inheritedEventCount: 0 }),
     resolveAgent: vi.fn(async () => ({ agent: parentAgent })),
+  })
+  ctx.provide('sessionQuery', {
+    readSession: vi.fn(async (sessionId: string) => ({
+      session: sessionId === 'parent' ? header('parent', 1) : header('child', 2),
+      inheritedEventCount: 0,
+      events: sessionId === 'parent' ? parentEvents : childEvents,
+    })),
+  })
+  const serviceFor = vi.fn(() => agentContext.compaction)
+  ctx.provide('agentPresets', {
+    composedPreset: vi.fn(() => undefined),
+    serviceFor,
   })
   ctx.provide('sessions', { flush })
   ctx.provide('tokenMeter', {
@@ -133,7 +148,7 @@ function harness(initialTokens: number, compactedTokens: number | null) {
   })
   const service = new SideChatService(ctx, { foldAppendThresholdRatio: 0.8 })
   Object.defineProperty(service, 'table', { value: table, writable: true })
-  return { service, table, parentEvents, compactNow, order, agentContext }
+  return { service, table, parentEvents, parentAgent, compactNow, serviceFor, order, agentContext }
 }
 
 describe('Fold context pressure delivery', () => {
@@ -156,6 +171,9 @@ describe('Fold context pressure delivery', () => {
     await expect(target.service.commitFold({ childSessionId: 'child', foldId: FOLD_ID, content: foldContent(), allowStale: true }))
       .resolves.toMatchObject({ ok: true, value: { state: 'committed' } })
     expect(target.compactNow).toHaveBeenCalledOnce()
+    // The compaction backend resolves through the preset-scoped service, not a
+    // root service: agentPresets.serviceFor(agent, 'compaction').
+    expect(target.serviceFor).toHaveBeenCalledWith(target.parentAgent, 'compaction')
     expect(target.parentEvents.filter(event => event.type === 'user/message')).toHaveLength(1)
     expect(target.order).toEqual([
       'maintenance:start', 'maintenance:end',

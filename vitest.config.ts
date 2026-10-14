@@ -24,6 +24,7 @@ export default defineConfig({
       '@deepseek-ai/dsh-tools': fileURLToPath(new URL('./tests/shims/dsh-runtime.ts', import.meta.url)),
       '@deepseek-ai/dsh-sandbox-policy': fileURLToPath(new URL('./tests/shims/dsh-runtime.ts', import.meta.url)),
       '@deepseek-ai/dsh-user-approval': fileURLToPath(new URL('./tests/shims/dsh-runtime.ts', import.meta.url)),
+      '@deepseek-ai/dsh-system-prompt': fileURLToPath(new URL('./tests/shims/dsh-runtime.ts', import.meta.url)),
       '@deepseek-ai/dsh-storage-domain': fileURLToPath(new URL('./tests/shims/dsh-runtime.ts', import.meta.url)),
       '@deepseek-ai/dsh-token-meter/client': fileURLToPath(new URL('./tests/shims/token-meter.ts', import.meta.url)),
     },

@@ -18,12 +18,12 @@
     "sourceMap": true,
     "composite": true,
     "types": ["node"],
-    "typeRoots": ["./node_modules/@types"]
+    "typeRoots": ["./node_modules/@types"],
+    "lib": ["ES2024", "ESNext.Disposable"]
   },
   "files": [
     "types/dsh-compat.d.ts",
     "src/index.ts",
-    "src/preset-root.ts",
     "src/service.ts",
     "src/spec.ts",
     "src/types.ts",
@@ -35,9 +35,13 @@
     "src/tool.ts",
     "src/revision.ts",
     "src/tool-contract.ts",
-    "src/relations.ts"
+    "src/relations.ts",
+    "src/message-source.ts",
+    "src/session-history.ts",
+    "src/record-compat.ts"
     ,"src/task-seed.ts"
     ,"src/usage.ts"
     ,"src/trajectory.ts"
+    ,"src/persona.ts"
   ]
 }

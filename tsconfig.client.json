@@ -31,7 +31,9 @@
     "src/client/locales.ts"
     ,"src/client/workflow-events.ts"
     ,"src/client/trajectory-panel.tsx"
+    ,"src/client/trajectory-layout.ts"
     ,"src/types.ts",
+    "src/record-compat.ts",
     "src/seed.ts",
     "src/revision.ts"
   ]

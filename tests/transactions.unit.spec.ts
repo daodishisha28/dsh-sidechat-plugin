@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SideChatRecord } from '../src/types.ts'
-import { promoteFoldRevision, reserveCite, reserveFold, updateFold, withdrawFoldRevision } from '../src/transactions.ts'
+import { promoteFoldRevision, reserveCite, reserveFold, updateCite, updateFold, withdrawFoldRevision } from '../src/transactions.ts'
 
 function record(): SideChatRecord {
   return {
@@ -50,6 +50,36 @@ describe('atomic aggregate reducers', () => {
     const once = reserveCite(record(), cite)
     expect(reserveCite(once, cite)).toBe(once)
     expect(once.cites).toHaveLength(1)
+  })
+
+  it('freezes the cite payload: reserving an existing citeId never replaces its content', () => {
+    const once = reserveCite(record(), {
+      citeId: '22222222-2222-4222-8222-222222222222', messageId: 'm1', state: 'pending',
+      content: 'frozen reply', estimatedTokens: 2, createdAt: 3, updatedAt: 3,
+    })
+    // A second reserve under the same citeId — even with different content —
+    // is the idempotent no-op; the frozen payload survives untouched.
+    const again = reserveCite(once, {
+      citeId: '22222222-2222-4222-8222-222222222222', messageId: 'm1', state: 'pending',
+      content: 'REPLACEMENT attempt', estimatedTokens: 9, createdAt: 9, updatedAt: 9,
+    })
+    expect(again).toBe(once)
+    expect(again.cites[0]).toMatchObject({ content: 'frozen reply', estimatedTokens: 2 })
+  })
+
+  it('rejects update paths that would rewrite the frozen cite content', () => {
+    const reserved = reserveCite(record(), {
+      citeId: '22222222-2222-4222-8222-222222222222', messageId: 'm1', state: 'pending',
+      content: 'frozen reply', estimatedTokens: 2, createdAt: 3, updatedAt: 3,
+    })
+    expect(() => updateCite(reserved, '22222222-2222-4222-8222-222222222222', cite => ({
+      ...cite, content: 'rewritten payload',
+    }))).toThrow(/content is frozen/u)
+    // State bookkeeping updates remain possible without touching the payload.
+    const retried = updateCite(reserved, '22222222-2222-4222-8222-222222222222', cite => ({
+      ...cite, state: 'pending', updatedAt: 9, failure: undefined,
+    }))
+    expect(retried.cites[0]).toMatchObject({ content: 'frozen reply', state: 'pending' })
   })
 
   it('promotes, supersedes and softly withdraws immutable revisions', () => {

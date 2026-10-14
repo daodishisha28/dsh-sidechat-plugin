@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">SideChat 四步使用流程</title>
+  <desc id="desc">一，在父会话输入 side 命令；二，选择 Seed 与权限并提出问题；三，在独立会话中多轮讨论；四，使用 sidefold 预览编辑结论并提交到父会话。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1L6 4L1 7" stroke="#91A4BF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+  <rect width="1200" height="330" rx="20" fill="#F7F9FC"/>
+  <g font-family="'Segoe UI','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+    <text x="32" y="43" fill="#536B87" font-size="13" font-weight="650" letter-spacing="1">从一个问题，到一份可回写的结论</text>
+    <g fill="white" stroke="#DFE6F0"><rect x="32" y="68" width="260" height="178" rx="15"/><rect x="324" y="68" width="260" height="178" rx="15"/><rect x="616" y="68" width="260" height="178" rx="15"/><rect x="908" y="68" width="260" height="178" rx="15"/></g>
+    <g fill="#E8EFFF"><circle cx="63" cy="101" r="14"/><circle cx="355" cy="101" r="14"/><circle cx="647" cy="101" r="14"/></g><circle cx="939" cy="101" r="14" fill="#DFF2EA"/>
+    <g fill="#4166A3" font-size="13" font-weight="700" text-anchor="middle"><text x="63" y="106">1</text><text x="355" y="106">2</text><text x="647" y="106">3</text></g><text x="939" y="106" fill="#287A64" font-size="13" font-weight="700" text-anchor="middle">4</text>
+    <g fill="#213752" font-size="21" font-weight="650"><text x="52" y="149">开启支线</text><text x="344" y="149">带上必要背景</text><text x="636" y="149">独立、多轮讨论</text><text x="928" y="149">预览并回写结论</text></g>
+    <g fill="#64778F" font-size="14"><text x="52" y="181">用 /side 或选择轨迹节点</text><text x="52" y="207">围绕一个具体问题展开</text><text x="344" y="181">选择背景与权限模式</text><text x="344" y="207">/side 默认最近 1 条 + 只读</text><text x="636" y="181">保留完整 Session 与历史</text><text x="636" y="207">可切回主线，也可稍后恢复</text><text x="928" y="181">/sidefold 生成可编辑预览</text><text x="928" y="207">确认后将 Fold 带回父会话</text></g>
+    <g stroke="#91A4BF" stroke-width="1.8" marker-end="url(#arrow)"><path d="M299 157H316"/><path d="M591 157H608"/><path d="M883 157H900"/></g>
+    <g font-size="13"><text x="52" y="285" fill="#526B89">Seed 决定带入的背景</text><text x="449" y="285" fill="#526B89">原始讨论留在 SideChat</text><text x="873" y="285" fill="#287A64">Fold / Cite 交付本身不唤醒父会话</text></g>
+  </g>
+</svg>

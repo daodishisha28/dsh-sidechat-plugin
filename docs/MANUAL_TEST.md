@@ -2,9 +2,17 @@
 
 自动化测试不会调用真实模型，也不会写入开发目录之外。完成安装后，在一个可用模型配置的 Web profile 中执行下列验收。
 
+> **实施状态（2026-10-13，DSH 0.2.1-alpha.2）**
+>
+> - 本清单的完整人工操作尚未执行，未逐项打勾。
+> - 自动化已覆盖真实隔离 Host 的 readonly/inherit 创建、权限安装、Fold/Cite/撤回、冷重启后读取及 Fold、AgentLoop 权限故障阻断与恢复；模型输出为离线受控 adapter，不是在线模型验收。
+> - Chrome headless 使用独立 profile，已实测加载页面、打开子会话、认证 SideChat RPC、输入 `/side` 后显示命令及描述；没有未捕获 JS 异常。这只覆盖浏览器 smoke，不能替代下面完整人工清单。
+> - 完整验证链：28 文件 / 241 测试，真实 Host/Client 导出类型检查通过。当前证据与限制见 [实施报告 §10](DSH_0.2_IMPLEMENTATION_REPORT.md)。
+> - 安装除核对服务行与 preset registry 外，必须实际调用 `/sidechat/*`；只看首页 200 或没有 entry 错误不能证明 RPC 路由已激活。
+
 ## 安装与加载
 
-- `dsh --profile web --dump-config` 中存在 `sidechat-preset-root` 和 `sidechat`；
+- `dsh --profile web --dump-config` 中存在 `sidechat` 服务行（`dsh-sidechat-plugin`）；
 - Agent preset 列表存在 `sidechat-clarifier`；
 - 浏览器无 Client bundle 加载错误；
 - `/sidechat/tree` 与 `/sidechat/seedChoices` 不返回 404；页面不再请求旧的 `/api/sidechat/*`；
@@ -19,6 +27,9 @@
 
 - `/side` 和 `/btw` 的第一个高亮选项都是 `tail:1`；未显式选择的文本 fallback 也默认为 `tail:1`；
 - 选择 Seed 后出现第二个 DSH 内嵌权限选择框，默认高亮“只读模式”；↑/↓ 可切换“只读模式/继承”，Enter 确认，Esc 取消；
+- 在轨迹速览中打开正式 `SideChat Fold` 或 `SideChat Cite` 节点，详情显示“选择此项”；选择后可创建新的 SideChat，初始上下文分别保留原始 `fold id/rev/source` 或 `cite id/source/message` marker；Fold 撤回和缺少正式 marker 的兼容旧节点仍没有选择按钮；
+- Ctrl+点击任意 Turn 会同步选择其中全部可选子节点，再次 Ctrl+点击或在详情中取消该 Turn 会同步清除全部子节点；Turn 完整选中时显示“全部 N 项已选”，仅手动选择部分子节点时只显示“已选 N / M 项”且不使用完整蓝色高亮；点击“清除”后所有相关高亮消失；普通点击另一个 Turn 打开详情时，详情焦点高亮必须随点击切换，最新 Turn 不得永久显示成选中状态；
+- 轨迹选择栏显示“创建时限额：目标模型上下文 30%；不可读取时 48k”。已知 100k context window 时超过约 30k estimated token 的轨迹在创建子 Session 前被拒绝；模型容量不可得时 48k 内可创建；两种情况都不静默截断或压缩；
 - 选择 Seed 后，创建弹窗自动把焦点从父 composer 移到澄清问题输入框；不使用鼠标即可输入；
 - 澄清问题输入框 Enter 创建、Shift+Enter 换行、Esc 取消；右下角按钮为浅灰金属质感、无边框；
 - 创建弹窗不显示模型策略，B 自动继承父会话最近模型；创建后可用 B 的 DSH 原生模型选择器切换；
@@ -37,6 +48,17 @@
 - 父会话没有直接文本时 `tail:1` 仍允许创建，provenance 中模式为 `tail:1` 且 messages 为空；
 - 让最新单条直接文本超过 12,000 字符，确认 `task` 拒绝并提示使用 selection/pick/summary，不做静默截断；
 - 超过 Seed 字符/token 预算时创建被拒绝且不复制完整 transcript。
+
+## 轨迹执行关系与已选清单
+
+- 使用包含至少三个 Step 的 Turn：各次模型节点、中间 assistant 说明、每个调用及结果都能在展开后看到，后续 Step 不与前一步工具混成同层分支；
+- 同一响应发出两个调用、结果逆序到达时，连线仍按 callId 指向各自结果；同批标记不声称实际并行执行；
+- Turn 收起后显示隐藏的真实节点数量。Ctrl+选择整个 Turn，已选清单应包含所有可选子节点，数量与创建时发送的 refs 一致；
+- 在已选清单中查看详情、定位和移除：定位应展开所属 Turn 并移动视图，移除应同步更新 Turn 的部分选中态；清除后清单和子节点选中态均为空；
+- 展开 subagent 时不出现虚构的 `SA · tN` 过程；有真实结果时返回卡查看、选择均映射该结果，返回卡与 RESULT 同选但只计一次；缺少结果时明确说明，不请求虚构 event ID；
+- 已成功返回的调用不显示 running；运行中、取消、未知不显示成功勾号；一次工具失败不得因调用、结果、Turn 三处显示而计成三次失败；
+- 在两个 Turn 之间插入的 Fold/Cite 保持顺序和可选性；缺少 Turn/Step 的已投影事件不得在图上消失；
+- 打开另一个节点详情时查看高亮随之切换；取消 SideChat 弹窗仍回到原轨迹图并保留选择、展开状态和视图位置。
 
 ## 模型与 preset
 

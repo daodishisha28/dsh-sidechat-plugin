@@ -39,11 +39,18 @@ export function updateFold(
   return { ...record, folds, updatedAt: Math.max(record.updatedAt, target.updatedAt) }
 }
 
+/**
+ * Mutate one cite atomically. The reserved `content` is FROZEN for the whole
+ * lifetime of the cite: no update path (state retry, commit bookkeeping) may
+ * rewrite the payload under the same citeId. `reserveCite` is the only writer
+ * of `content`, and it is idempotent — an existing citeId is never replaced.
+ */
 export function updateCite(
   record: SideChatRecord,
   citeId: string,
   mutate: (cite: CiteRecord) => CiteRecord,
 ): SideChatRecord {
+  const before = record.cites.find(cite => cite.citeId === citeId)
   let found = false
   const cites = record.cites.map((cite) => {
     if (cite.citeId !== citeId) return cite
@@ -52,6 +59,9 @@ export function updateCite(
   })
   if (!found) throw new Error(`unknown cite: ${citeId}`)
   const target = cites.find(cite => cite.citeId === citeId)!
+  if (before !== undefined && target.content !== before.content) {
+    throw new Error(`cite ${citeId} content is frozen once reserved; the payload cannot be replaced`)
+  }
   return { ...record, cites, updatedAt: Math.max(record.updatedAt, target.updatedAt) }
 }
 

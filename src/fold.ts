@@ -96,8 +96,12 @@ export function buildFoldPrompt(
   ].join('\n')
 }
 
-export function buildFoldRewritePrompt(maxTokens: number): string {
-  return `上一版 Fold 的结构或长度不合格。请重写一次，严格使用固定六项结构且不超过 ${maxTokens} token；只输出 Fold，并只使用先前给出的 detail pointer。`
+export function buildFoldRewritePrompt(maxTokens: number, draft: { readonly messageId: string; readonly text: string }): string {
+  return [
+    `Fold 草稿消息 ${draft.messageId} 的结构或长度不合格。请仅重写下面明确指定的草稿一次，严格使用固定六项结构且不超过 ${maxTokens} token；只输出 Fold，并只使用先前给出的 detail pointer。`,
+    '草稿之后的普通追问及回答不属于本次 Fold，不得把它们当作草稿或新增结论。',
+    JSON.stringify({ messageId: draft.messageId, text: draft.text }),
+  ].join('\n')
 }
 
 export function foldMarker(foldId: string, revision: number, childSessionId: string): string {

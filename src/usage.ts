@@ -39,12 +39,26 @@ function aggregate(turns: readonly TurnTokenUsage[]): UsageTotals | undefined {
   }
 }
 
+/**
+ * Surface replacement copies (compaction rewrites with `surfaceOp: replace`)
+ * are snapshots of prior surface content, not new billed attempts. Feeding
+ * them to the exact helper would either double-count or — because the helper
+ * is fail-closed about lifecycle order — invalidate the whole turn. Filtering
+ * keeps the original attempt's usage exact while a replacement never becomes
+ * a second usage sample.
+ */
+export function durableAttemptEvent(event: SessionEvent): boolean {
+  const surfaceOp = (event as SessionEvent & { surfaceOp?: unknown }).surfaceOp
+  return surfaceOp === undefined || surfaceOp === 'append'
+}
+
 /** Derive exact provider usage only from complete, internally valid durable turns. */
 export function deriveSessionUsage(events: readonly SessionEvent[]): SessionUsage {
   const turns: TurnTokenUsage[] = []
   let current: SessionEvent[] | undefined
   let incompleteTurns = 0
   for (const event of events) {
+    if (!durableAttemptEvent(event)) continue
     if (event.type === 'turn/start') {
       if (current !== undefined) incompleteTurns += 1
       current = [event]
